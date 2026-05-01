@@ -1,0 +1,33 @@
+{
+  "username": "your_username@nudt.edu.cn",
+  "password": "your_password",
+  "base_url": "https://mail.nudt.edu.cn",
+  "mailbox": "inbox",
+  "pages": 1,
+  "output_dir": "mails",
+
+  "login_selectors": {
+    "form_selector": "form#loginForm",
+    "username_field": "input[name='username']",
+    "password_field": "input[name='password']",
+    "submit_button": "button[type='submit']"
+  },
+
+  "mail_list_selectors": {
+    "mail_container": ".mail-list",
+    "mail_item": ".mail-item",
+    "subject_selector": ".subject",
+    "sender_selector": ".sender",
+    "time_selector": ".time",
+    "link_selector": "a.mail-link"
+  },
+
+  "mail_content_selectors": {
+    "subject_selector": "h1.mail-subject",
+    "from_selector": ".mail-from",
+    "to_selector": ".mail-to",
+    "date_selector": ".mail-date",
+    "body_selector": ".mail-body",
+    "attachments_selector": ".attachments a"
+  }
+}

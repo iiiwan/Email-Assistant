@@ -1,0 +1,20 @@
+# 虚拟环境
+cc_test/
+
+# 会话缓存（包含登录凭证，不能提交到版本库）
+.session_cache.json
+
+# 配置文件（含密码）
+config.json
+
+# Python缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude Code 本地配置（含预授权命令，可能含凭据）
+.claude/
+
+# 调试文件
+*.html
+mails/
