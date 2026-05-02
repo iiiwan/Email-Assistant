@@ -1265,6 +1265,115 @@ class MailCrawler:
             summary = summary[:500] + "..."
         return summary
 
+    @staticmethod
+    def ai_classify_and_summarize(mails: List[Dict], api_key: str, api_base: str,
+                                   model: str) -> Optional[Dict]:
+        """
+        通过 AI（Anthropic 兼容 API）对邮件进行分类和总结。
+
+        Args:
+            mails: 邮件列表（需含 subject, body 字段）
+            api_key: API Key
+            api_base: API Base URL
+            model: 模型名称
+
+        Returns:
+            {'summary': '总结段落', 'categories': {'类别': [邮件索引列表]}} 或 None
+        """
+        if not api_key:
+            logger.warning("未提供 AI API Key，跳过 AI 分类总结")
+            return None
+
+        # 构建邮件信息文本
+        mail_texts = []
+        for i, m in enumerate(mails):
+            subject = m.get('subject', '无标题')
+            sender = m.get('from', m.get('sender', '未知'))
+            body = m.get('body', '')
+            if body:
+                body = ' '.join(body.split())[:500]
+            mail_texts.append(f"[{i+1}] 主题: {subject}\n    发件人: {sender}\n    正文: {body or '(无正文)'}")
+
+        mails_content = "\n\n".join(mail_texts)
+
+        prompt = f"""请对以下邮件进行分类和总结。
+
+邮件列表：
+{mails_content}
+
+请按以下格式返回（严格遵守格式，不要添加多余内容）：
+
+【分类】
+每封邮件一行，格式为：序号. 类别
+类别只能是以下之一：工作、学术、广告推广、通知、账务、社交、其他
+
+【总结】
+用一段话（100-200字）总结这些邮件的核心内容，突出重要事项和需要关注的点。"""
+
+        try:
+            import requests as req
+
+            headers = {
+                'x-api-key': api_key,
+                'content-type': 'application/json',
+                'anthropic-version': '2023-06-01'
+            }
+            payload = {
+                'model': model,
+                'max_tokens': 1024,
+                'messages': [{'role': 'user', 'content': prompt}]
+            }
+
+            url = f"{api_base.rstrip('/')}/v1/messages"
+            resp = req.post(url, json=payload, headers=headers, timeout=30, verify=False)
+            resp.raise_for_status()
+            data = resp.json()
+
+            # 提取回复文本
+            content = ''
+            if 'content' in data:
+                for block in data['content']:
+                    if block.get('type') == 'text':
+                        content += block.get('text', '')
+
+            if not content:
+                logger.warning("AI 返回内容为空")
+                return None
+
+            # 解析分类结果
+            categories = {}
+            summary = ''
+            in_category = False
+            in_summary = False
+
+            for line in content.split('\n'):
+                line = line.strip()
+                if '分类' in line and '【' in line:
+                    in_category = True
+                    in_summary = False
+                    continue
+                elif '总结' in line and '【' in line:
+                    in_category = False
+                    in_summary = True
+                    continue
+
+                if in_category and line:
+                    # 解析 "1. 广告推广" 格式
+                    parts = line.split('.', 1)
+                    if len(parts) == 2:
+                        cat = parts[1].strip()
+                        if cat:
+                            categories.setdefault(cat, []).append(int(parts[0].strip()) - 1)
+                elif in_summary and line:
+                    summary += line
+
+            logger.info(f"AI 分类完成: {len(categories)} 个类别")
+            return {'summary': summary, 'categories': categories}
+
+        except Exception as e:
+            logger.error(f"AI 分类总结失败: {e}")
+            return None
+
     def save_session(self, username: str, session_file: str = '.session_cache.json') -> None:
         """保存会话到本地文件，下次运行可直接复用，避免频繁登录"""
         try:
@@ -1432,6 +1541,10 @@ def main():
     parser.add_argument('--attachments', nargs='+', help='附件文件路径（发送模式，可多个）')
     parser.add_argument('--smtp-host', default='mail.nudt.edu.cn', help='SMTP 服务器地址')
     parser.add_argument('--smtp-port', type=int, default=25, help='SMTP 服务器端口')
+    parser.add_argument('--ai', action='store_true', help='启用 AI 分类和总结（需要 API Key）')
+    parser.add_argument('--api-key', help='AI API Key')
+    parser.add_argument('--api-base', default='https://token-plan-cn.xiaomimimo.com/anthropic', help='AI API Base URL')
+    parser.add_argument('--ai-model', default='mimo-v2-pro', help='AI 模型名称')
 
     args = parser.parse_args()
 
@@ -1448,6 +1561,11 @@ def main():
 
     username = args.username or config.get('username')
     password = args.password or config.get('password')
+
+    # AI 配置（命令行优先，其次从 config.json 读取）
+    api_key = args.api_key or config.get('ai_api_key')
+    api_base = args.api_base or config.get('ai_api_base', 'https://token-plan-cn.xiaomimimo.com/anthropic')
+    ai_model = args.ai_model or config.get('ai_model', 'mimo-v2-flash')
 
     # 提示用户输入认证信息
     if args.interactive or not username or not password:
@@ -1661,11 +1779,20 @@ def main():
                     sender_groups[sender] = []
                 sender_groups[sender].append(mail)
 
-            # 一段话总结
-            summary_date = selected_date if not search_keyword else None
-            summary = MailCrawler.generate_summary(all_mails, summary_date)
-            print(f"\n【邮件总结】")
-            print(f"{summary}")
+            # 一段话总结（AI 或关键词模式）
+            ai_result = None
+            if args.ai:
+                print(f"\n正在调用 AI 分类总结...")
+                ai_result = MailCrawler.ai_classify_and_summarize(all_mails, api_key, api_base, ai_model)
+
+            if ai_result and ai_result.get('summary'):
+                print(f"\n【邮件总结】")
+                print(f"{ai_result['summary']}")
+            else:
+                summary_date = selected_date if not search_keyword else None
+                summary = MailCrawler.generate_summary(all_mails, summary_date)
+                print(f"\n【邮件总结】")
+                print(f"{summary}")
 
             # 统计摘要
             print(f"\n【摘要统计】")
@@ -1708,38 +1835,47 @@ def main():
             # 分类总结
             print(f"\n【分类总结】")
 
-            # 按主题关键词分类
-            subject_keywords = {
-                '会议': ['会议', 'meeting', '通知'],
-                '通知': ['通知', 'announcement', '通告'],
-                '报告': ['报告', 'report', '汇报'],
-                '提醒': ['提醒', 'reminder', '提示'],
-                '任务': ['任务', 'task', '工作'],
-                '其他': []
-            }
+            if ai_result and ai_result.get('categories'):
+                # AI 分类模式
+                for category, indices in ai_result['categories'].items():
+                    print(f"  * {category}：{len(indices)} 封")
+                    for idx in indices:
+                        if 0 <= idx < len(all_mails):
+                            mail = all_mails[idx]
+                            print(f"    - {mail.get('subject', '无标题')}")
+            else:
+                # 关键词分类模式
+                subject_keywords = {
+                    '会议': ['会议', 'meeting', '通知'],
+                    '通知': ['通知', 'announcement', '通告'],
+                    '报告': ['报告', 'report', '汇报'],
+                    '提醒': ['提醒', 'reminder', '提示'],
+                    '任务': ['任务', 'task', '工作'],
+                    '其他': []
+                }
 
-            category_counts = {}
-            for category, keywords in subject_keywords.items():
-                count = 0
-                for mail in all_mails:
-                    subject = mail.get('subject', '').lower()
-                    if category == '其他':
-                        continue
-                    for keyword in keywords:
-                        if keyword in subject:
-                            count += 1
-                            break
-                if count > 0:
-                    category_counts[category] = count
+                category_counts = {}
+                for category, keywords in subject_keywords.items():
+                    count = 0
+                    for mail in all_mails:
+                        subject = mail.get('subject', '').lower()
+                        if category == '其他':
+                            continue
+                        for keyword in keywords:
+                            if keyword in subject:
+                                count += 1
+                                break
+                    if count > 0:
+                        category_counts[category] = count
 
-            # 计算其他类别
-            other_count = len(all_mails) - sum(category_counts.values())
-            if other_count > 0:
-                category_counts['其他'] = other_count
+                # 计算其他类别
+                other_count = len(all_mails) - sum(category_counts.values())
+                if other_count > 0:
+                    category_counts['其他'] = other_count
 
-            # 输出分类统计
-            for category, count in category_counts.items():
-                print(f"  * {category}：{count} 封")
+                # 输出分类统计
+                for category, count in category_counts.items():
+                    print(f"  * {category}：{count} 封")
 
             # 建议和提醒
             print(f"\n【建议和提醒】")
