@@ -4,7 +4,8 @@
 
 ## 功能特点
 
-- **邮件爬取**：通过 Coremail JSON API 获取收件箱、已发送等文件夹的邮件列表和正文
+- **邮件爬取**：通过 Coremail JSON API 获取收件箱、已发送等文件夹的邮件列表
+- **邮件正文**：通过 Playwright 浏览器自动化读取邮件完整正文内容
 - **SMTP 发信**：通过 SMTP 直接发送邮件，无需打开浏览器
 - **附件支持**：发送邮件时可添加多个附件
 - **关键词搜索**：按主题/发件人关键词搜索邮件
@@ -20,7 +21,10 @@
 source cc_test/Scripts/activate
 
 # 安装依赖
-pip install requests beautifulsoup4 lxml
+pip install -r requirements.txt
+
+# 安装 Playwright 浏览器（读取邮件正文需要）
+playwright install chromium
 ```
 
 ## 使用方法
@@ -105,7 +109,9 @@ CC_test/
 ├── email_crawler.py        # 主程序
 ├── send_mail_smtp.py       # 独立 SMTP 发送脚本（最小示例）
 ├── requirements.txt        # 依赖包列表
-└── README.md               # 说明文档
+├── config.example.json     # 配置文件示例
+├── README.md               # 说明文档
+└── CLAUDE.md               # 项目开发指南
 ```
 
 ### 主要类和方法
@@ -114,7 +120,8 @@ CC_test/
   - `login()` — 登录邮箱，获取会话 SID
   - `load_session()` / `save_session()` — 会话缓存，避免重复登录
   - `get_mail_list()` — 通过 Coremail JSON API 获取邮件列表
-  - `get_mail_content()` — 获取邮件正文和附件
+  - `get_mail_content()` — 获取邮件元数据
+  - `get_mail_content_playwright()` — 通过 Playwright 读取邮件完整正文（静态方法）
   - `send_mail()` — 通过 SMTP 发送邮件（支持附件、抄送、密送）
   - `logout()` — 退出登录
   - `is_date_mail()` / `is_today_mail()` — 日期筛选（静态方法）
@@ -140,10 +147,11 @@ CC_test/
 ## 注意事项
 
 1. **网络环境**：需能访问 mail.nudt.edu.cn（校内网络或 VPN）
-2. **会话缓存**：登录后 SID 缓存 8 小时，期间无需重复登录
-3. **频率控制**：请求间自动添加随机延迟，避免被封
-4. **SMTP 发信**：不需要网页登录，直接通过 SMTP 协议发送
-5. **SSL 证书**：默认禁用 SSL 证书验证，因服务器使用自签名证书
+2. **Playwright**：读取邮件正文需要安装 Playwright 及 Chromium 浏览器
+3. **会话缓存**：登录后 SID 缓存 8 小时，期间无需重复登录
+4. **频率控制**：请求间自动添加随机延迟，避免被封
+5. **SMTP 发信**：不需要网页登录，直接通过 SMTP 协议发送
+6. **SSL 证书**：默认禁用 SSL 证书验证，因服务器使用自签名证书
 
 ## 许可证
 
