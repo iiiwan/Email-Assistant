@@ -10,6 +10,8 @@
   "ai_api_base": "https://token-plan-cn.xiaomimimo.com/anthropic",
   "ai_model": "mimo-v2-pro",
 
+  "digest_to": "your_qq@qq.com",
+
   "login_selectors": {
     "form_selector": "form#loginForm",
     "username_field": "input[name='username']",

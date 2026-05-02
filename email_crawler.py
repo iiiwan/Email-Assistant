@@ -1638,6 +1638,8 @@ def main():
     parser.add_argument('--api-key', help='AI API Key')
     parser.add_argument('--api-base', default='https://token-plan-cn.xiaomimimo.com/anthropic', help='AI API Base URL')
     parser.add_argument('--ai-model', default='mimo-v2-pro', help='AI 模型名称')
+    parser.add_argument('--daily-digest', action='store_true', help='每日日报模式：拉取今日邮件、AI 总结、发送到指定邮箱')
+    parser.add_argument('--digest-to', help='日报发送目标邮箱（默认从 config.json 读取）')
 
     args = parser.parse_args()
 
@@ -1660,6 +1662,7 @@ def main():
     api_key = args.api_key or config.get('ai_api_key')
     api_base = args.api_base or config.get('ai_api_base', 'https://token-plan-cn.xiaomimimo.com/anthropic')
     ai_model = args.ai_model or config.get('ai_model', 'mimo-v2-flash')
+    digest_to = args.digest_to or config.get('digest_to', '')
 
     # 提示用户输入认证信息
     if args.interactive or not username or not password:
@@ -1683,8 +1686,8 @@ def main():
     selected_date = None
     date_start = None
     date_end = None
-    if args.send:
-        selected_date = date.today()  # 发送模式不需要日期选择
+    if args.send or args.daily_digest:
+        selected_date = date.today()  # 发送/日报模式不需要日期选择
     elif args.keyword:
         selected_date = None  # 关键词模式不需要日期
     elif args.start_date or args.end_date:
@@ -1760,6 +1763,113 @@ def main():
             print(f"\n邮件发送成功！")
         else:
             print(f"\n邮件发送失败，请检查日志。")
+        return
+
+    # ===== 每日日报模式 =====
+    if args.daily_digest:
+        print("=== 每日邮件日报 ===\n")
+        session_file = '.session_cache.json'
+        session_loaded = crawler.load_session(username, session_file)
+        if not session_loaded:
+            print("正在登录邮箱...")
+            if not crawler.login(username, password):
+                logger.error("登录失败，程序退出")
+                return
+            crawler.save_session(username, session_file)
+        else:
+            print("复用缓存会话。\n")
+
+        today = date.today()
+        print(f"正在拉取 {today} 的邮件...")
+        all_mails = []
+        for page in range(1, 3):
+            mails = crawler.get_mail_list(args.mailbox, page, target_date=today)
+            if not mails:
+                break
+            all_mails.extend(mails)
+            if page < 3:
+                time.sleep(1)
+
+        # 去重
+        seen = set()
+        deduped = []
+        for m in all_mails:
+            mid = m.get('id', '')
+            if mid and mid not in seen:
+                seen.add(mid)
+                deduped.append(m)
+        all_mails = deduped
+
+        # 筛选今日邮件 + 过滤自己发的
+        date_mails = [m for m in all_mails if MailCrawler.is_date_mail(m, today)]
+        date_mails = [m for m in date_mails if m.get('sender', m.get('from', '')).lower() != username.lower()]
+        all_mails = date_mails
+
+        if not all_mails:
+            print(f"\n{today} 没有收到邮件，跳过日报。")
+            crawler.logout()
+            return
+
+        print(f"共 {len(all_mails)} 封邮件，正在生成 AI 总结...\n")
+
+        # 用 Playwright 获取邮件正文（最多 10 封）
+        max_content = min(10, len(all_mails))
+        target_mails = all_mails[:max_content]
+        pw_bodies = MailCrawler.get_mail_content_playwright(username, password, target_mails)
+        for mail in target_mails:
+            body = pw_bodies.get(mail.get('id', ''), '')
+            mail['body'] = body
+
+        # AI 总结
+        ai_result = MailCrawler.ai_classify_and_summarize(all_mails, api_key, api_base, ai_model)
+
+        # 构建日报邮件
+        digest_lines = []
+        digest_lines.append(f"<h2>  {today} 邮件日报（{len(all_mails)} 封）</h2>")
+
+        if ai_result and ai_result.get('summary'):
+            digest_lines.append(f"<p><b>AI 总结：</b><br>{ai_result['summary']}</p>")
+
+        if ai_result and ai_result.get('categories'):
+            digest_lines.append("<p><b>分类统计：</b></p><ul>")
+            for cat, indices in ai_result['categories'].items():
+                subjects = [all_mails[i].get('subject', '无标题') for i in indices if i < len(all_mails)]
+                digest_lines.append(f"<li><b>{cat}</b>（{len(indices)} 封）：{'、'.join(subjects[:5])}</li>")
+            digest_lines.append("</ul>")
+
+        digest_lines.append("<hr><p><b>邮件详情：</b></p>")
+        for i, mail in enumerate(all_mails, 1):
+            sender = mail.get('sender', mail.get('from', '未知'))
+            subject = mail.get('subject', '无标题')
+            time_str = mail.get('time', mail.get('date', ''))
+            body_preview = mail.get('body', '')
+            if body_preview:
+                body_preview = ' '.join(body_preview.split())[:200]
+                if len(mail.get('body', '')) > 200:
+                    body_preview += '...'
+            digest_lines.append(
+                f"<p><b>{i}. {subject}</b><br>"
+                f"发件人：{sender} | 时间：{time_str}<br>"
+                f"{body_preview}</p>"
+            )
+
+        digest_body = '\n'.join(digest_lines)
+
+        # 发送日报
+        print(f"正在发送日报到 {digest_to}...")
+        success = crawler.send_mail(
+            to=digest_to,
+            subject=f"邮件日报 - {today}",
+            body=digest_body,
+            is_html=True,
+            username=username, password=password,
+        )
+        if success:
+            print(f"\n日报已发送到 {digest_to}！")
+        else:
+            print(f"\n日报发送失败。")
+
+        crawler.logout()
         return
 
     # ===== 邮件爬取/搜索模式（需要网页登录）=====
