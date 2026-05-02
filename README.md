@@ -85,6 +85,13 @@ python email_crawler.py --username your_email@nudt.edu.cn --password your_passwo
     --api-key YOUR_API_KEY \
     --api-base https://token-plan-cn.xiaomimimo.com/anthropic \
     --ai-model mimo-v2-pro
+
+# 按日期范围获取邮件（最近一周）
+python email_crawler.py --username your_email@nudt.edu.cn --password your_password \
+    --start-date 2026-4-25 --end-date 2026-5-1 --ai --api-key YOUR_API_KEY
+
+# 只指定起始日期（到今天为止）
+python email_crawler.py --interactive --start-date 2026-4-1 --ai --api-key YOUR_API_KEY
 ```
 
 ## 命令行参数
@@ -106,6 +113,8 @@ python email_crawler.py --username your_email@nudt.edu.cn --password your_passwo
 | `--mailbox`, `-m` | 邮箱类型（inbox/sent/draft/trash/spam） | inbox |
 | `--pages` | 爬取页数 | 1 |
 | `--date`, `-d` | 指定日期（YYYY-M-D） | 当天 |
+| `--start-date` | 起始日期（配合 --end-date 使用） | — |
+| `--end-date` | 结束日期（配合 --start-date 使用） | — |
 | `--today`, `-t` | 只获取今日邮件 | — |
 | `--keyword`, `-k` | 按关键词搜索（不限日期，最多20页） | — |
 | `--max-content` | 最大获取邮件内容数量 | 10 |
@@ -141,7 +150,7 @@ CC_test/
   - `get_mail_content_playwright()` — 通过 Playwright 读取邮件完整正文（静态方法）
   - `send_mail()` — 通过 SMTP 发送邮件（支持附件、抄送、密送）
   - `logout()` — 退出登录
-  - `is_date_mail()` / `is_today_mail()` — 日期筛选（静态方法）
+  - `is_date_mail()` / `is_today_mail()` / `is_date_range_mail()` — 日期筛选（静态方法）
   - `generate_summary()` — 中文邮件摘要生成（静态方法）
   - `ai_classify_and_summarize()` — AI 智能分类和精炼摘要（静态方法）
 

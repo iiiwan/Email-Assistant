@@ -1165,6 +1165,44 @@ class MailCrawler:
         return MailCrawler.is_date_mail(mail_info, date.today())
 
     @staticmethod
+    def is_date_range_mail(mail_info: Dict, start_date: date, end_date: date) -> bool:
+        """
+        检查邮件是否在指定日期范围内
+
+        Args:
+            mail_info: 邮件信息字典
+            start_date: 起始日期（含）
+            end_date: 结束日期（含）
+
+        Returns:
+            如果在范围内则返回True
+        """
+        try:
+            time_str = None
+            for field in ['time', 'date', 'receivedDate', 'sentDate', 'received', 'sent']:
+                if field in mail_info and mail_info[field]:
+                    time_str = str(mail_info[field])
+                    break
+
+            if not time_str:
+                return False
+
+            # 提取邮件日期
+            patterns = [
+                r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})',  # YYYY-MM-DD, YYYY/MM/DD
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, time_str)
+                if match:
+                    year, month, day = int(match.group(1)), int(match.group(2)), int(match.group(3))
+                    mail_date = date(year, month, day)
+                    return start_date <= mail_date <= end_date
+
+            return False
+        except Exception:
+            return False
+
+    @staticmethod
     def generate_summary(mails: List[Dict], target_date: date = None) -> str:
         """
         生成一段话总结邮件内容
@@ -1541,6 +1579,8 @@ def main():
     parser.add_argument('--config', '-c', help='配置文件路径（JSON格式）')
     parser.add_argument('--today', '-t', action='store_true', help='只获取今日邮件并直接输出到控制台')
     parser.add_argument('--date', '-d', help='指定日期（格式：YYYY-M-D，例如：2026-4-1），默认当天')
+    parser.add_argument('--start-date', help='起始日期（配合 --end-date 使用，格式同 --date）')
+    parser.add_argument('--end-date', help='结束日期（配合 --start-date 使用，格式同 --date）')
     parser.add_argument('--interactive', '-i', action='store_true', help='交互式输入用户名和密码')
     parser.add_argument('--max-content', type=int, default=10, help='最大获取邮件内容数量（默认为10）')
     parser.add_argument('--no-content', action='store_true', help='不获取邮件内容，只获取元数据')
@@ -1603,10 +1643,17 @@ def main():
 
     # 日期选择（关键词搜索模式下跳过）
     selected_date = None
+    date_start = None
+    date_end = None
     if args.send:
         selected_date = date.today()  # 发送模式不需要日期选择
     elif args.keyword:
         selected_date = None  # 关键词模式不需要日期
+    elif args.start_date or args.end_date:
+        # 日期范围模式
+        date_start = parse_date_input(args.start_date) if args.start_date else date.today() - timedelta(days=30)
+        date_end = parse_date_input(args.end_date) if args.end_date else date.today()
+        logger.info(f"使用日期范围: {date_start} ~ {date_end}")
     elif args.date:
         selected_date = parse_date_input(args.date)
         logger.info(f"使用命令行指定日期: {selected_date}")
@@ -1616,12 +1663,19 @@ def main():
     else:
         print("\n=== 日期选择 ===")
         print("请输入日期（格式：2026-4-1），直接回车使用今天日期")
+        print("或输入日期范围（格式：2026-4-1~2026-4-30）")
         date_input = input("日期: ").strip()
-        if date_input:
+        if '~' in date_input:
+            parts = date_input.split('~', 1)
+            date_start = parse_date_input(parts[0].strip())
+            date_end = parse_date_input(parts[1].strip())
+            print(f"选择的日期范围: {date_start} ~ {date_end}")
+        elif date_input:
             selected_date = parse_date_input(date_input)
+            print(f"选择的日期: {selected_date}")
         else:
             selected_date = date.today()
-        print(f"选择的日期: {selected_date}")
+            print(f"使用今日日期: {selected_date}")
         print()
 
     if not username or not password:
@@ -1731,9 +1785,15 @@ def main():
         else:
             # 日期模式：按日期获取邮件
             print("正在获取邮件列表...")
-            for page in range(1, args.pages + 1):
+            # 日期范围模式拉取更多页
+            fetch_pages = args.pages
+            if date_start and date_end:
+                days_span = (date_end - date_start).days + 1
+                fetch_pages = max(args.pages, min(40, days_span))
+            target_date = selected_date  # 单日模式传给 API 做服务端过滤
+            for page in range(1, fetch_pages + 1):
                 logger.info(f"开始爬取第 {page} 页")
-                mails = crawler.get_mail_list(args.mailbox, page, target_date=selected_date)
+                mails = crawler.get_mail_list(args.mailbox, page, target_date=target_date)
                 if not mails:
                     logger.warning(f"第 {page} 页没有邮件或解析失败")
                     break
@@ -1742,14 +1802,30 @@ def main():
                         mail['link'] = f"{crawler.base_url}/coremail/s?func=mbox:readMessage&mid={mail['id']}&sid={crawler.current_sid}"
                 all_mails.extend(mails)
                 logger.info(f"第 {page} 页爬取完成，共 {len(mails)} 个邮件")
-                if page < args.pages:
-                    time.sleep(2)
+                if page < fetch_pages:
+                    time.sleep(1)
 
-            # 筛选指定日期邮件
-            print(f"正在筛选 {selected_date} 的邮件...")
-            date_mails = [mail for mail in all_mails if MailCrawler.is_date_mail(mail, selected_date)]
-            logger.info(f"{selected_date} 的邮件数量: {len(date_mails)} / {len(all_mails)}")
-            all_mails = date_mails
+            # 去重
+            seen_ids = set()
+            deduped = []
+            for mail in all_mails:
+                mid = mail.get('id', '')
+                if mid and mid not in seen_ids:
+                    seen_ids.add(mid)
+                    deduped.append(mail)
+            all_mails = deduped
+
+            # 筛选日期
+            if date_start and date_end:
+                print(f"正在筛选 {date_start} ~ {date_end} 的邮件...")
+                date_mails = [mail for mail in all_mails if MailCrawler.is_date_range_mail(mail, date_start, date_end)]
+                logger.info(f"{date_start} ~ {date_end} 的邮件数量: {len(date_mails)} / {len(all_mails)}")
+                all_mails = date_mails
+            else:
+                print(f"正在筛选 {selected_date} 的邮件...")
+                date_mails = [mail for mail in all_mails if MailCrawler.is_date_mail(mail, selected_date)]
+                logger.info(f"{selected_date} 的邮件数量: {len(date_mails)} / {len(all_mails)}")
+                all_mails = date_mails
 
         # 获取邮件内容（如果用户需要）
         if all_mails and not args.no_content:
@@ -1783,6 +1859,8 @@ def main():
             print("\n" + "="*60)
             if search_keyword:
                 print(f"关键词 '{search_keyword}' 搜索结果 ({len(all_mails)} 封)")
+            elif date_start and date_end:
+                print(f"{date_start} ~ {date_end} 邮件整理总结 ({len(all_mails)} 封)")
             else:
                 print(f"{selected_date} 邮件整理总结 ({len(all_mails)} 封)")
             print("="*60)
@@ -1816,6 +1894,8 @@ def main():
             print(f"  * 发件人数量：{len(sender_groups)} 个")
             if search_keyword:
                 print(f"  * 搜索关键词：{search_keyword}")
+            elif date_start and date_end:
+                print(f"  * 日期范围：{date_start} ~ {date_end}")
             else:
                 print(f"  * 日期范围：{selected_date}")
 
@@ -1930,6 +2010,9 @@ def main():
         else:
             if search_keyword:
                 print(f"\n[空] 未找到包含 '{search_keyword}' 的邮件")
+            elif date_start and date_end:
+                print(f"\n[空] {date_start} ~ {date_end} 没有邮件")
+                print(f"提示：可以尝试检查其他日期范围或邮箱文件夹。")
             else:
                 print(f"\n[空] {selected_date} 没有邮件")
                 print(f"提示：可以尝试检查其他日期或邮箱文件夹。")
