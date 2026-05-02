@@ -939,72 +939,12 @@ class MailCrawler:
             logger.error("发送需要提供用户名和密码")
             return False
 
-        # 优先尝试 Coremail JSON API
-        if self._send_mail_api(to, subject, body, cc, bcc, is_html, attachments, username, password):
-            return True
-
-        # API 失败，回退到 SMTP
-        logger.info("Coremail API 发送失败，尝试 SMTP...")
         return self._send_mail_smtp(to, subject, body, cc, bcc, is_html, priority, attachments, username, password)
-
-    def _send_mail_api(self, to: str, subject: str, body: str, cc: str = '', bcc: str = '',
-                       is_html: bool = False, attachments: List[str] = None,
-                       username: str = '', password: str = '') -> bool:
-        """通过 Coremail JSON API 发送邮件"""
-        try:
-            # 登录获取 SID（使用 Session 保持 Cookie）
-            api_url = f"{self.base_url}/coremail/s/json"
-            s = requests.Session()
-            s.verify = False
-            login_resp = s.post(
-                f"{api_url}?func=user:login",
-                json={'uid': username, 'password': password},
-                headers={'Content-Type': 'application/json'},
-                timeout=15
-            )
-            login_data = login_resp.json()
-            if login_data.get('code') != 'S_OK':
-                logger.warning(f"Coremail 登录失败: {login_data}")
-                return False
-            sid = login_data['var']['sid']
-
-            # 发送邮件
-            headers = {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'Referer': f"{self.base_url}/coremail/XT/index.jsp?sid={sid}"
-            }
-            payload = {
-                'isSave': True,
-                'to': to,
-                'cc': cc,
-                'bcc': bcc,
-                'subject': subject,
-                'content': body,
-                'contentType': 'text/html' if is_html else 'text/plain',
-                'priority': 3,
-                'saveSent': True
-            }
-            resp = s.post(
-                f"{api_url}?func=mbox:compose&sid={sid}",
-                json=payload, headers=headers, timeout=15
-            )
-            result = resp.json()
-            if result.get('code') == 'S_OK':
-                logger.info(f"邮件发送成功（Coremail API）: to={to}, subject={subject}")
-                return True
-            else:
-                logger.warning(f"Coremail API 发送失败: {result}")
-                return False
-
-        except Exception as e:
-            logger.warning(f"Coremail API 发送异常: {e}")
-            return False
 
     def _send_mail_smtp(self, to: str, subject: str, body: str, cc: str = '', bcc: str = '',
                         is_html: bool = False, priority: int = 3,
                         attachments: List[str] = None, username: str = '', password: str = '') -> bool:
-        """通过 SMTP 发送邮件"""
+        """通过 SMTP 发送邮件（自动尝试 SOCKS5 代理 + SSL）"""
 
         from_addr = username
 
@@ -1049,29 +989,56 @@ class MailCrawler:
             if bcc:
                 recipients += [addr.strip() for addr in bcc.split(',') if addr.strip()]
 
-            # 连接 SMTP 服务器并发送
-            logger.info(f"连接 SMTP 服务器: {self.smtp_host}:{self.smtp_port}")
-            if self.smtp_port == 465:
-                server = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, timeout=15)
-            else:
-                server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=15)
-                server.ehlo()
-            server.login(username, password)
-            server.sendmail(from_addr, recipients, msg.as_string())
-            server.quit()
+            # 尝试 SOCKS5 代理 + SSL 端口 465（绕过代理工具对 SMTP 的干扰）
+            server = None
+            for attempt in ['socks_ssl', 'direct']:
+                try:
+                    if attempt == 'socks_ssl':
+                        try:
+                            import socks
+                            socks.set_default_proxy(socks.SOCKS5, '127.0.0.1', 7897)
+                            import socket as _socket
+                            _socket.socket = socks.socksocket
+                            import ssl as _ssl
+                            ctx = _ssl.create_default_context()
+                            ctx.check_hostname = False
+                            ctx.verify_mode = _ssl.CERT_NONE
+                            server = smtplib.SMTP_SSL(self.smtp_host, 465, timeout=15, context=ctx)
+                            logger.info("通过 SOCKS5 代理连接 SMTP (端口465 SSL)")
+                        except ImportError:
+                            continue
+                    else:
+                        if self.smtp_port == 465:
+                            server = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, timeout=15)
+                        else:
+                            server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=15)
+                            server.ehlo()
+                        logger.info(f"直接连接 SMTP 服务器: {self.smtp_host}:{self.smtp_port}")
 
-            logger.info(f"邮件发送成功: to={to}, subject={subject}")
-            return True
+                    server.login(username, password)
+                    server.sendmail(from_addr, recipients, msg.as_string())
+                    server.quit()
+                    logger.info(f"邮件发送成功: to={to}, subject={subject}")
+                    return True
+                except Exception as e:
+                    if server:
+                        try:
+                            server.quit()
+                        except:
+                            pass
+                    server = None
+                    if attempt == 'socks_ssl':
+                        logger.warning(f"SOCKS5 SSL 发送失败，尝试直连: {e}")
+                    else:
+                        raise
 
         except smtplib.SMTPAuthenticationError:
             logger.error("SMTP 认证失败，请检查用户名和密码")
-            return False
         except smtplib.SMTPConnectError:
             logger.error(f"无法连接到 SMTP 服务器 {self.smtp_host}:{self.smtp_port}")
-            return False
         except Exception as e:
             logger.error(f"发送邮件时发生错误: {e}")
-            return False
+        return False
 
     def save_mails(self, mails: List[Dict], output_dir: str = 'mails'):
         """
