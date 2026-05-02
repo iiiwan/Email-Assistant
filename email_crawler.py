@@ -1308,7 +1308,7 @@ class MailCrawler:
 类别只能是以下之一：工作、学术、广告推广、通知、账务、社交、其他
 
 【总结】
-用一段话（100-200字）总结这些邮件的核心内容，突出重要事项和需要关注的点。"""
+用一段话（50-100字）精炼总结这些邮件：只说重点，谁发了什么、需要你做什么。不要描述邮件本身，不要重复发件人信息，不要加客套话。"""
 
         try:
             import requests as req
@@ -1320,7 +1320,7 @@ class MailCrawler:
             }
             payload = {
                 'model': model,
-                'max_tokens': 1024,
+                'max_tokens': 2048,
                 'messages': [{'role': 'user', 'content': prompt}]
             }
 
@@ -1329,12 +1329,16 @@ class MailCrawler:
             resp.raise_for_status()
             data = resp.json()
 
-            # 提取回复文本
+            # 提取回复文本（优先 text 类型，其次 thinking）
             content = ''
             if 'content' in data:
                 for block in data['content']:
                     if block.get('type') == 'text':
                         content += block.get('text', '')
+                if not content:
+                    for block in data['content']:
+                        if block.get('type') == 'thinking':
+                            content += block.get('thinking', '')
 
             if not content:
                 logger.warning("AI 返回内容为空")
