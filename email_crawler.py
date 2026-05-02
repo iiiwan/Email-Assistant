@@ -1694,10 +1694,8 @@ def main():
                     # 显示邮件正文预览（如果已获取）
                     body = mail.get('body', '')
                     if body:
-                        # 提取前100个字符，并清除多余空格
-                        preview = body[:100].strip()
-                        if len(body) > 100:
-                            preview += "..."
+                        # 清除多余空格，显示完整内容
+                        preview = ' '.join(body.split())
                         if preview:
                             print(f"     内容：{preview}")
 
