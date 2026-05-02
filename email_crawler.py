@@ -918,7 +918,7 @@ class MailCrawler:
                   is_html: bool = False, priority: int = 3,
                   attachments: List[str] = None, username: str = '', password: str = '') -> bool:
         """
-        通过 SMTP 发送邮件
+        发送邮件（优先 Coremail API，失败则回退 SMTP）
 
         Args:
             to: 收件人邮箱，多个用逗号分隔
@@ -929,15 +929,82 @@ class MailCrawler:
             is_html: 正文是否为HTML格式（默认False，纯文本）
             priority: 优先级 (3=普通, 1=紧急, 5=低)
             attachments: 附件文件路径列表
-            username: SMTP 登录用户名（留空则自动取 from_addr）
-            password: SMTP 登录密码
+            username: 登录用户名
+            password: 登录密码
 
         Returns:
             是否发送成功
         """
         if not username or not password:
-            logger.error("SMTP发送需要提供用户名和密码")
+            logger.error("发送需要提供用户名和密码")
             return False
+
+        # 优先尝试 Coremail JSON API
+        if self._send_mail_api(to, subject, body, cc, bcc, is_html, attachments, username, password):
+            return True
+
+        # API 失败，回退到 SMTP
+        logger.info("Coremail API 发送失败，尝试 SMTP...")
+        return self._send_mail_smtp(to, subject, body, cc, bcc, is_html, priority, attachments, username, password)
+
+    def _send_mail_api(self, to: str, subject: str, body: str, cc: str = '', bcc: str = '',
+                       is_html: bool = False, attachments: List[str] = None,
+                       username: str = '', password: str = '') -> bool:
+        """通过 Coremail JSON API 发送邮件"""
+        try:
+            # 登录获取 SID（使用 Session 保持 Cookie）
+            api_url = f"{self.base_url}/coremail/s/json"
+            s = requests.Session()
+            s.verify = False
+            login_resp = s.post(
+                f"{api_url}?func=user:login",
+                json={'uid': username, 'password': password},
+                headers={'Content-Type': 'application/json'},
+                timeout=15
+            )
+            login_data = login_resp.json()
+            if login_data.get('code') != 'S_OK':
+                logger.warning(f"Coremail 登录失败: {login_data}")
+                return False
+            sid = login_data['var']['sid']
+
+            # 发送邮件
+            headers = {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Referer': f"{self.base_url}/coremail/XT/index.jsp?sid={sid}"
+            }
+            payload = {
+                'isSave': True,
+                'to': to,
+                'cc': cc,
+                'bcc': bcc,
+                'subject': subject,
+                'content': body,
+                'contentType': 'text/html' if is_html else 'text/plain',
+                'priority': 3,
+                'saveSent': True
+            }
+            resp = s.post(
+                f"{api_url}?func=mbox:compose&sid={sid}",
+                json=payload, headers=headers, timeout=15
+            )
+            result = resp.json()
+            if result.get('code') == 'S_OK':
+                logger.info(f"邮件发送成功（Coremail API）: to={to}, subject={subject}")
+                return True
+            else:
+                logger.warning(f"Coremail API 发送失败: {result}")
+                return False
+
+        except Exception as e:
+            logger.warning(f"Coremail API 发送异常: {e}")
+            return False
+
+    def _send_mail_smtp(self, to: str, subject: str, body: str, cc: str = '', bcc: str = '',
+                        is_html: bool = False, priority: int = 3,
+                        attachments: List[str] = None, username: str = '', password: str = '') -> bool:
+        """通过 SMTP 发送邮件"""
 
         from_addr = username
 
@@ -984,8 +1051,11 @@ class MailCrawler:
 
             # 连接 SMTP 服务器并发送
             logger.info(f"连接 SMTP 服务器: {self.smtp_host}:{self.smtp_port}")
-            server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=15)
-            server.ehlo()
+            if self.smtp_port == 465:
+                server = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, timeout=15)
+            else:
+                server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=15)
+                server.ehlo()
             server.login(username, password)
             server.sendmail(from_addr, recipients, msg.as_string())
             server.quit()
@@ -1702,7 +1772,7 @@ def main():
         is_html = not args.text
         attachments = args.attachments or []
 
-        print(f"\n正在通过 SMTP ({crawler.smtp_host}:{crawler.smtp_port}) 发送邮件...")
+        print(f"\n正在发送邮件...")
         print(f"  发件人: {username}")
         print(f"  收件人: {to_addr}")
         print(f"  主题: {subject}")
