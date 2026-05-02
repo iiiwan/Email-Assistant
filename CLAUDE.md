@@ -22,7 +22,6 @@ source f:/Worker_development/CC_test/cc_test/Scripts/activate && cd f:/Worker_de
 ## 主要文件
 
 - `email_crawler.py` — 主程序：SMTP 发信 + Coremail JSON API 爬取邮件 + AI 分类总结
-- `send_mail_smtp.py` — 独立 SMTP 最小示例
 - `requirements.txt` — 依赖：requests, beautifulsoup4, lxml
 - `config.example.json` — 配置文件示例（含 AI API 配置）
 

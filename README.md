@@ -132,7 +132,6 @@ python email_crawler.py --interactive --start-date 2026-4-1 --ai --api-key YOUR_
 ```
 CC_test/
 ├── email_crawler.py        # 主程序
-├── send_mail_smtp.py       # 独立 SMTP 发送脚本（最小示例）
 ├── requirements.txt        # 依赖包列表
 ├── config.example.json     # 配置文件示例
 ├── config.json             # 实际配置文件（可选，不纳入版本控制）
