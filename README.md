@@ -11,6 +11,7 @@
 - **关键词搜索**：按主题/发件人关键词搜索邮件
 - **日期筛选**：按指定日期过滤邮件，支持多种日期格式
 - **中文总结**：自动生成邮件摘要，按发件人分组输出
+- **AI 智能分类**：调用 AI（Anthropic 兼容 API）对邮件自动分类（工作/学术/广告推广/通知/账务/社交/其他）并生成精炼摘要
 - **会话缓存**：登录后缓存 SID，复用会话避免频繁登录
 - **交互式输入**：支持命令行和交互式两种方式输入认证信息
 
@@ -73,6 +74,17 @@ python email_crawler.py --interactive --keyword "会议纪要"
 
 # 获取已发送邮件
 python email_crawler.py --interactive --mailbox sent
+
+# 使用 AI 智能分类和总结
+python email_crawler.py --username your_email@nudt.edu.cn --password your_password \
+    --today --ai --api-key YOUR_API_KEY
+
+# 使用 AI + 指定模型和 API 地址
+python email_crawler.py --username your_email@nudt.edu.cn --password your_password \
+    --date 2026-4-30 --max-content 5 --ai \
+    --api-key YOUR_API_KEY \
+    --api-base https://token-plan-cn.xiaomimimo.com/anthropic \
+    --ai-model mimo-v2-pro
 ```
 
 ## 命令行参数
@@ -101,6 +113,10 @@ python email_crawler.py --interactive --mailbox sent
 | `--interactive`, `-i` | 交互式输入用户名和密码 | — |
 | `--output`, `-o` | 输出目录 | mails |
 | `--verbose`, `-v` | 显示详细日志 | — |
+| `--ai` | 启用 AI 分类和总结 | — |
+| `--api-key` | AI API Key | — |
+| `--api-base` | AI API Base URL | https://token-plan-cn.xiaomimimo.com/anthropic |
+| `--ai-model` | AI 模型名称 | mimo-v2-pro |
 
 ## 程序结构
 
@@ -110,6 +126,7 @@ CC_test/
 ├── send_mail_smtp.py       # 独立 SMTP 发送脚本（最小示例）
 ├── requirements.txt        # 依赖包列表
 ├── config.example.json     # 配置文件示例
+├── config.json             # 实际配置文件（可选，不纳入版本控制）
 ├── README.md               # 说明文档
 └── CLAUDE.md               # 项目开发指南
 ```
@@ -126,6 +143,7 @@ CC_test/
   - `logout()` — 退出登录
   - `is_date_mail()` / `is_today_mail()` — 日期筛选（静态方法）
   - `generate_summary()` — 中文邮件摘要生成（静态方法）
+  - `ai_classify_and_summarize()` — AI 智能分类和精炼摘要（静态方法）
 
 ## 输出格式
 
