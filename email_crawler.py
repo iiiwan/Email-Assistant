@@ -1609,10 +1609,11 @@ def main():
         logging.getLogger().setLevel(logging.INFO)
         logger.setLevel(logging.INFO)
 
-    # 从配置文件或命令行参数读取配置
+    # 自动加载 config.json（如果存在），--config 可指定其他路径
     config = {}
-    if args.config and os.path.exists(args.config):
-        with open(args.config, 'r', encoding='utf-8') as f:
+    config_path = args.config or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
+    if os.path.exists(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
 
     username = args.username or config.get('username')
@@ -1852,6 +1853,13 @@ def main():
                 logger.info(f"成功获取 {len(content_mails)} 封邮件的内容")
             else:
                 logger.warning("未能获取任何邮件的内容")
+
+        # 过滤自己发给自己的邮件
+        if not search_keyword and not args.mailbox == 'sent':
+            all_mails = [
+                m for m in all_mails
+                if m.get('sender', m.get('from', '')).lower() != username.lower()
+            ]
 
         # 输出结果
         if all_mails:
