@@ -1325,8 +1325,20 @@ class MailCrawler:
             }
 
             url = f"{api_base.rstrip('/')}/v1/messages"
-            resp = req.post(url, json=payload, headers=headers, timeout=30, verify=False)
-            resp.raise_for_status()
+
+            # 重试一次（MiMo 偶尔超时）
+            resp = None
+            for attempt in range(2):
+                try:
+                    resp = req.post(url, json=payload, headers=headers, timeout=60, verify=False)
+                    resp.raise_for_status()
+                    break
+                except req.exceptions.Timeout:
+                    if attempt == 0:
+                        logger.warning("AI API 超时，正在重试...")
+                    else:
+                        raise
+
             data = resp.json()
 
             # 提取回复文本（优先 text 类型，其次 thinking）
