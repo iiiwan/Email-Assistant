@@ -252,12 +252,18 @@ def main():
 
         ai_result = ai_classify_and_summarize(all_mails, api_key, api_base, ai_model)
 
+        if not ai_result:
+            print("AI 服务不可用，将使用关键词摘要生成日报。\n")
+
         # 构建日报邮件
         digest_lines = []
         digest_lines.append(f"<h2>  {date_label} 邮件日报（{len(all_mails)} 封）</h2>")
 
         if ai_result and ai_result.get('summary'):
             digest_lines.append(f"<p><b>AI 总结：</b><br>{ai_result['summary']}</p>")
+        else:
+            fallback_summary = generate_summary(all_mails, digest_start if digest_start == digest_end else None)
+            digest_lines.append(f"<p><b>摘要：</b><br>{fallback_summary}</p>")
 
         if ai_result and ai_result.get('categories'):
             digest_lines.append("<p><b>分类统计：</b></p><ul>")
@@ -449,6 +455,8 @@ def main():
             if args.ai:
                 print(f"\n正在调用 AI 分类总结...")
                 ai_result = ai_classify_and_summarize(all_mails, api_key, api_base, ai_model)
+                if not ai_result:
+                    print("AI 服务不可用，将使用关键词摘要代替。")
 
             if ai_result and ai_result.get('summary'):
                 print(f"\n【邮件总结】")
