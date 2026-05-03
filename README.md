@@ -34,7 +34,7 @@ playwright install chromium
 
 ```bash
 # 基本发送
-python email_crawler.py --send \
+python -m email_crawler.cli --send \
     --username your_email@nudt.edu.cn --password your_password \
     --to recipient@example.com \
     --subject "邮件主题" \
@@ -42,7 +42,7 @@ python email_crawler.py --send \
     --text
 
 # 带抄送和附件
-python email_crawler.py --send \
+python -m email_crawler.cli --send \
     --username your_email@nudt.edu.cn --password your_password \
     --to recipient@qq.com \
     --subject "日报" \
@@ -51,7 +51,7 @@ python email_crawler.py --send \
     --attachments report.pdf photo.png
 
 # 使用自定义 SMTP 服务器
-python email_crawler.py --send \
+python -m email_crawler.cli --send \
     --username your_email@nudt.edu.cn --password your_password \
     --smtp-host mail.nudt.edu.cn --smtp-port 25 \
     --to recipient@qq.com --subject "test" --body "hello" --text
@@ -61,37 +61,37 @@ python email_crawler.py --send \
 
 ```bash
 # 交互式登录，获取今日邮件
-python email_crawler.py --today --interactive
+python -m email_crawler.cli --today --interactive
 
 # 获取指定日期邮件
-python email_crawler.py --username your_email@nudt.edu.cn --password your_password --date 2026-4-1
+python -m email_crawler.cli --username your_email@nudt.edu.cn --password your_password --date 2026-4-1
 
 # 只获取元数据，不获取正文（更快）
-python email_crawler.py --interactive --no-content
+python -m email_crawler.cli --interactive --no-content
 
 # 按关键词搜索
-python email_crawler.py --interactive --keyword "会议纪要"
+python -m email_crawler.cli --interactive --keyword "会议纪要"
 
 # 获取已发送邮件
-python email_crawler.py --interactive --mailbox sent
+python -m email_crawler.cli --interactive --mailbox sent
 
 # 使用 AI 智能分类和总结
-python email_crawler.py --username your_email@nudt.edu.cn --password your_password \
+python -m email_crawler.cli --username your_email@nudt.edu.cn --password your_password \
     --today --ai --api-key YOUR_API_KEY
 
 # 使用 AI + 指定模型和 API 地址
-python email_crawler.py --username your_email@nudt.edu.cn --password your_password \
+python -m email_crawler.cli --username your_email@nudt.edu.cn --password your_password \
     --date 2026-4-30 --max-content 5 --ai \
     --api-key YOUR_API_KEY \
     --api-base https://token-plan-cn.xiaomimimo.com/anthropic \
     --ai-model mimo-v2-pro
 
 # 按日期范围获取邮件（最近一周）
-python email_crawler.py --username your_email@nudt.edu.cn --password your_password \
+python -m email_crawler.cli --username your_email@nudt.edu.cn --password your_password \
     --start-date 2026-4-25 --end-date 2026-5-1 --ai --api-key YOUR_API_KEY
 
 # 只指定起始日期（到今天为止）
-python email_crawler.py --interactive --start-date 2026-4-1 --ai --api-key YOUR_API_KEY
+python -m email_crawler.cli --interactive --start-date 2026-4-1 --ai --api-key YOUR_API_KEY
 ```
 
 ## 命令行参数
@@ -131,27 +131,47 @@ python email_crawler.py --interactive --start-date 2026-4-1 --ai --api-key YOUR_
 
 ```
 CC_test/
-├── email_crawler.py        # 主程序
-├── requirements.txt        # 依赖包列表
-├── config.example.json     # 配置文件示例
-├── config.json             # 实际配置文件（可选，不纳入版本控制）
-├── README.md               # 说明文档
-└── CLAUDE.md               # 项目开发指南
+├── email_crawler/                  # 主包
+│   ├── __init__.py                 # 包入口，导出 MailCrawler、main
+│   ├── crawler.py                  # MailCrawler 核心类（登录、邮件列表、会话管理）
+│   ├── sender.py                   # SMTP 发信（SOCKS5 代理 + SSL 回退）
+│   ├── fetcher.py                  # Playwright 浏览器获取邮件正文
+│   ├── summarizer.py               # 邮件摘要生成 + AI 分类总结
+│   ├── utils.py                    # 日期工具、邮件日期过滤、文件保存
+│   └── cli.py                      # 命令行入口（参数解析 + main）
+├── requirements.txt                # 依赖包列表
+├── config.example.json             # 配置文件示例
+├── config.json                     # 实际配置文件（不纳入版本控制）
+├── README.md                       # 说明文档
+└── CLAUDE.md                       # 项目开发指南
 ```
 
-### 主要类和方法
+### 运行方式
 
-- `MailCrawler`: 主类
+```bash
+python -m email_crawler.cli <参数>
+```
+
+### 主要模块
+
+- `crawler.py` — `MailCrawler` 核心类
   - `login()` — 登录邮箱，获取会话 SID
   - `load_session()` / `save_session()` — 会话缓存，避免重复登录
   - `get_mail_list()` — 通过 Coremail JSON API 获取邮件列表
   - `get_mail_content()` — 获取邮件元数据
-  - `get_mail_content_playwright()` — 通过 Playwright 读取邮件完整正文（静态方法）
-  - `send_mail()` — 通过 SMTP 发送邮件（支持附件、抄送、密送）
+  - `send_mail()` — 通过 SMTP 发送邮件（委托 sender 模块）
   - `logout()` — 退出登录
-  - `is_date_mail()` / `is_today_mail()` / `is_date_range_mail()` — 日期筛选（静态方法）
-  - `generate_summary()` — 中文邮件摘要生成（静态方法）
-  - `ai_classify_and_summarize()` — AI 智能分类和精炼摘要（静态方法）
+- `sender.py` — SMTP 发信
+  - `send_mail()` — 发送邮件（支持附件、抄送、密送、代理回退）
+- `fetcher.py` — Playwright 正文获取
+  - `get_mail_content_playwright()` — 批量获取邮件完整正文
+- `summarizer.py` — 摘要与 AI
+  - `generate_summary()` — 关键词摘要
+  - `ai_classify_and_summarize()` — AI 智能分类和精炼摘要
+- `utils.py` — 工具函数
+  - `parse_date_input()` — 多格式日期解析
+  - `is_date_mail()` / `is_today_mail()` / `is_date_range_mail()` — 日期筛选
+  - `save_mails()` — 保存邮件到 JSON 文件
 
 ## 输出格式
 

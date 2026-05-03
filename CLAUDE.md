@@ -21,9 +21,22 @@ source f:/Worker_development/CC_test/cc_test/Scripts/activate && cd f:/Worker_de
 
 ## 主要文件
 
-- `email_crawler.py` — 主程序：SMTP 发信 + Coremail JSON API 爬取邮件 + AI 分类总结
+- `email_crawler/` — 主包目录
+  - `__init__.py` — 包入口，导出 MailCrawler、main
+  - `crawler.py` — MailCrawler 核心类（登录、邮件列表、邮件内容、会话管理）
+  - `sender.py` — SMTP 发信（SOCKS5 代理 + SSL 回退）
+  - `fetcher.py` — Playwright 浏览器自动化获取邮件正文
+  - `summarizer.py` — 邮件摘要生成 + AI 分类总结
+  - `utils.py` — 日期工具、邮件日期过滤、文件保存
+  - `cli.py` — argparse 参数定义 + main() 入口
 - `requirements.txt` — 依赖：requests, beautifulsoup4, lxml
 - `config.example.json` — 配置文件示例（含 AI API 配置）
+
+## 运行方式
+
+```bash
+python -m email_crawler.cli <参数>
+```
 
 ## 关键技术点
 
