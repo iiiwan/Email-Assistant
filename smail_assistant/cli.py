@@ -82,7 +82,28 @@ def main():
     digest_to = args.digest_to or config.get('digest_to', '')
 
     # 提示用户输入认证信息
-    if args.interactive or not username or not password:
+    # 命令行直接指定凭据 → 直接使用
+    if args.username and args.password:
+        if args.send:
+            logger.info("使用命令行提供的凭据发送邮件")
+        else:
+            logger.info("使用命令行提供的凭据登录邮箱")
+    # 凭据来自 config.json → 询问是否使用
+    elif username and password and not args.interactive:
+        print(f"\n检测到 config.json 中配置的账号：{username}")
+        confirm = input("是否使用该账号登录？(y/n，默认 y): ").strip().lower()
+        if confirm and confirm != 'y' and confirm != 'yes':
+            print("\n=== 手动输入登录信息 ===")
+            username = input("请输入邮箱用户名: ").strip()
+            password = getpass.getpass("请输入邮箱密码: ").strip()
+            if not username or not password:
+                logger.error("用户名和密码不能为空")
+                return
+            print()
+        else:
+            print(f"使用账号 {username} 登录。\n")
+    # 凭据不全或 --interactive → 交互式输入
+    else:
         print("\n=== 邮箱登录信息 ===")
         if not username:
             username = input("请输入邮箱用户名: ").strip()
@@ -92,10 +113,6 @@ def main():
             logger.error("用户名和密码不能为空")
             return
         print()
-    elif args.send:
-        logger.info("使用命令行提供的凭据发送邮件")
-    else:
-        logger.info("使用命令行提供的凭据登录邮箱")
 
     # 日期选择（关键词搜索模式下跳过）
     selected_date = None

@@ -29,7 +29,7 @@ source f:/Worker_development/CC_test/cc_test/Scripts/activate && cd f:/Worker_de
   - `summarizer.py` — 邮件摘要生成 + AI 分类总结
   - `utils.py` — 日期工具、邮件日期过滤、文件保存
   - `cli.py` — argparse 参数定义 + main() 入口
-- `requirements.txt` — 依赖：requests, beautifulsoup4, lxml
+- `requirements.txt` — 依赖：requests, beautifulsoup4, lxml, playwright, pysocks, tqdm
 - `config.example.json` — 配置文件示例（含 AI API 配置）
 
 ## 运行方式
@@ -40,11 +40,12 @@ python -m smail_assistant.cli <参数>
 
 ## 关键技术点
 
-- **SMTP 发信**：mail.nudt.edu.cn:25，AUTH PLAIN，无需 SSL/TLS
+- **SMTP 发信**：mail.nudt.edu.cn:25，AUTH PLAIN，无需 SSL/TLS；代理环境下自动回退 SOCKS5 + SSL 端口 465
 - **爬取邮件**：通过 Coremail JSON API（`/coremail/s/json`），需先网页登录获取 SID
 - **会话缓存**：SID 缓存到 `.session_cache.json`，有效期 8 小时
 - **SSL 证书**：服务器使用自签名证书，需禁用 SSL 验证
 - **发信模式无需登录**：`--send` 模式直接用 SMTP，跳过网页登录
+- **登录确认**：config.json 配置的账号密码运行时会提示确认，输入 `n` 可手动输入其他账号
 - **AI 分类总结**：通过小米 MiMo API（Anthropic 兼容格式）对邮件智能分类和精炼总结
   - 端点：`POST {api_base}/v1/messages`，Header `x-api-key`，`anthropic-version: 2023-06-01`
   - 默认模型：`mimo-v2-pro`，默认 API Base：`https://token-plan-cn.xiaomimimo.com/anthropic`
