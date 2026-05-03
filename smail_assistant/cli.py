@@ -8,6 +8,8 @@ import os
 import time
 from datetime import datetime, date, timedelta
 
+from tqdm import tqdm
+
 from .crawler import MailCrawler
 from .utils import parse_date_input, is_date_mail, is_date_range_mail
 from .fetcher import get_mail_content_playwright
@@ -201,21 +203,26 @@ def main():
 
         max_pages = 20 if digest_start != digest_end else 3
         all_mails = []
-        for page in range(1, max_pages + 1):
-            mails = crawler.get_mail_list(args.mailbox, page, target_date=digest_start if digest_start == digest_end else None)
-            if not mails:
-                break
-            all_mails.extend(mails)
-            if digest_start != digest_end:
-                last_time = mails[-1].get('time', mails[-1].get('date', ''))
-                try:
-                    last_date = datetime.strptime(last_time[:10], '%Y-%m-%d').date()
-                    if last_date < digest_start:
-                        break
-                except:
-                    pass
-            if page < max_pages:
-                time.sleep(1)
+        with tqdm(total=max_pages, desc="拉取邮件", unit="页") as pbar:
+            for page in range(1, max_pages + 1):
+                mails = crawler.get_mail_list(args.mailbox, page, target_date=digest_start if digest_start == digest_end else None)
+                if not mails:
+                    pbar.update(max_pages - page + 1)
+                    break
+                all_mails.extend(mails)
+                pbar.set_postfix(邮件数=len(all_mails))
+                if digest_start != digest_end:
+                    last_time = mails[-1].get('time', mails[-1].get('date', ''))
+                    try:
+                        last_date = datetime.strptime(last_time[:10], '%Y-%m-%d').date()
+                        if last_date < digest_start:
+                            pbar.update(max_pages - page)
+                            break
+                    except:
+                        pass
+                pbar.update(1)
+                if page < max_pages:
+                    time.sleep(1)
 
         # 去重
         seen = set()
@@ -327,20 +334,25 @@ def main():
         if search_keyword:
             print(f"正在搜索包含 '{search_keyword}' 的邮件（最多20页）...")
             max_search_pages = 20
-            for page in range(1, max_search_pages + 1):
-                logger.info(f"搜索第 {page} 页")
-                mails = crawler.get_mail_list(args.mailbox, page, target_date=None)
-                if not mails:
-                    break
-                for mail in mails:
-                    if 'id' in mail and crawler.current_sid:
-                        mail['link'] = f"{crawler.base_url}/coremail/s?func=mbox:readMessage&mid={mail['id']}&sid={crawler.current_sid}"
-                all_mails.extend(mails)
-                logger.info(f"第 {page} 页爬取完成，共 {len(mails)} 封")
-                if len(mails) < 50:
-                    break
-                if page < max_search_pages:
-                    time.sleep(1)
+            with tqdm(total=max_search_pages, desc="搜索邮件", unit="页") as pbar:
+                for page in range(1, max_search_pages + 1):
+                    logger.info(f"搜索第 {page} 页")
+                    mails = crawler.get_mail_list(args.mailbox, page, target_date=None)
+                    if not mails:
+                        pbar.update(max_search_pages - page + 1)
+                        break
+                    for mail in mails:
+                        if 'id' in mail and crawler.current_sid:
+                            mail['link'] = f"{crawler.base_url}/coremail/s?func=mbox:readMessage&mid={mail['id']}&sid={crawler.current_sid}"
+                    all_mails.extend(mails)
+                    pbar.set_postfix(邮件数=len(all_mails))
+                    logger.info(f"第 {page} 页爬取完成，共 {len(mails)} 封")
+                    if len(mails) < 50:
+                        pbar.update(max_search_pages - page)
+                        break
+                    pbar.update(1)
+                    if page < max_search_pages:
+                        time.sleep(1)
 
             seen = set()
             deduped = []
@@ -366,19 +378,23 @@ def main():
                 days_span = (date_end - date_start).days + 1
                 fetch_pages = max(args.pages, min(40, days_span))
             target_date = selected_date
-            for page in range(1, fetch_pages + 1):
-                logger.info(f"开始爬取第 {page} 页")
-                mails = crawler.get_mail_list(args.mailbox, page, target_date=target_date)
-                if not mails:
-                    logger.warning(f"第 {page} 页没有邮件或解析失败")
-                    break
-                for mail in mails:
-                    if 'id' in mail and crawler.current_sid:
-                        mail['link'] = f"{crawler.base_url}/coremail/s?func=mbox:readMessage&mid={mail['id']}&sid={crawler.current_sid}"
-                all_mails.extend(mails)
-                logger.info(f"第 {page} 页爬取完成，共 {len(mails)} 个邮件")
-                if page < fetch_pages:
-                    time.sleep(1)
+            with tqdm(total=fetch_pages, desc="获取邮件", unit="页") as pbar:
+                for page in range(1, fetch_pages + 1):
+                    logger.info(f"开始爬取第 {page} 页")
+                    mails = crawler.get_mail_list(args.mailbox, page, target_date=target_date)
+                    if not mails:
+                        logger.warning(f"第 {page} 页没有邮件或解析失败")
+                        pbar.update(fetch_pages - page + 1)
+                        break
+                    for mail in mails:
+                        if 'id' in mail and crawler.current_sid:
+                            mail['link'] = f"{crawler.base_url}/coremail/s?func=mbox:readMessage&mid={mail['id']}&sid={crawler.current_sid}"
+                    all_mails.extend(mails)
+                    pbar.set_postfix(邮件数=len(all_mails))
+                    logger.info(f"第 {page} 页爬取完成，共 {len(mails)} 个邮件")
+                    pbar.update(1)
+                    if page < fetch_pages:
+                        time.sleep(1)
 
             seen_ids = set()
             deduped = []

@@ -3,6 +3,8 @@
 import logging
 from typing import List, Dict
 
+from tqdm import tqdm
+
 logger = logging.getLogger(__name__)
 
 
@@ -98,7 +100,7 @@ def get_mail_content_playwright(username: str, password: str,
             return {ok: false, error: 'no content'};
         }'''
 
-        for mail in mail_list:
+        for mail in tqdm(mail_list, desc="读取邮件正文", unit="封"):
             orig_id = mail.get('id', '')
             subject = mail.get('subject', '无标题')
             if not orig_id:
