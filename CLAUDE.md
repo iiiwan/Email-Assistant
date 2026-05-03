@@ -21,7 +21,7 @@ source f:/Worker_development/CC_test/cc_test/Scripts/activate && cd f:/Worker_de
 
 ## 主要文件
 
-- `email_crawler/` — 主包目录
+- `smail_assistant/` — 主包目录（智能邮箱助手）
   - `__init__.py` — 包入口，导出 MailCrawler、main
   - `crawler.py` — MailCrawler 核心类（登录、邮件列表、邮件内容、会话管理）
   - `sender.py` — SMTP 发信（SOCKS5 代理 + SSL 回退）
@@ -35,7 +35,7 @@ source f:/Worker_development/CC_test/cc_test/Scripts/activate && cd f:/Worker_de
 ## 运行方式
 
 ```bash
-python -m email_crawler.cli <参数>
+python -m smail_assistant.cli <参数>
 ```
 
 ## 关键技术点

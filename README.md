@@ -1,4 +1,4 @@
-# 邮件爬取与发送工具
+# 智能邮箱助手
 
 适用于 NUDT 邮箱（mail.nudt.edu.cn，Coremail XT 系统）的邮件爬取和发送程序。
 
@@ -34,7 +34,7 @@ playwright install chromium
 
 ```bash
 # 基本发送
-python -m email_crawler.cli --send \
+python -m smail_assistant.cli --send \
     --username your_email@nudt.edu.cn --password your_password \
     --to recipient@example.com \
     --subject "邮件主题" \
@@ -42,7 +42,7 @@ python -m email_crawler.cli --send \
     --text
 
 # 带抄送和附件
-python -m email_crawler.cli --send \
+python -m smail_assistant.cli --send \
     --username your_email@nudt.edu.cn --password your_password \
     --to recipient@qq.com \
     --subject "日报" \
@@ -51,7 +51,7 @@ python -m email_crawler.cli --send \
     --attachments report.pdf photo.png
 
 # 使用自定义 SMTP 服务器
-python -m email_crawler.cli --send \
+python -m smail_assistant.cli --send \
     --username your_email@nudt.edu.cn --password your_password \
     --smtp-host mail.nudt.edu.cn --smtp-port 25 \
     --to recipient@qq.com --subject "test" --body "hello" --text
@@ -61,37 +61,37 @@ python -m email_crawler.cli --send \
 
 ```bash
 # 交互式登录，获取今日邮件
-python -m email_crawler.cli --today --interactive
+python -m smail_assistant.cli --today --interactive
 
 # 获取指定日期邮件
-python -m email_crawler.cli --username your_email@nudt.edu.cn --password your_password --date 2026-4-1
+python -m smail_assistant.cli --username your_email@nudt.edu.cn --password your_password --date 2026-4-1
 
 # 只获取元数据，不获取正文（更快）
-python -m email_crawler.cli --interactive --no-content
+python -m smail_assistant.cli --interactive --no-content
 
 # 按关键词搜索
-python -m email_crawler.cli --interactive --keyword "会议纪要"
+python -m smail_assistant.cli --interactive --keyword "会议纪要"
 
 # 获取已发送邮件
-python -m email_crawler.cli --interactive --mailbox sent
+python -m smail_assistant.cli --interactive --mailbox sent
 
 # 使用 AI 智能分类和总结
-python -m email_crawler.cli --username your_email@nudt.edu.cn --password your_password \
+python -m smail_assistant.cli --username your_email@nudt.edu.cn --password your_password \
     --today --ai --api-key YOUR_API_KEY
 
 # 使用 AI + 指定模型和 API 地址
-python -m email_crawler.cli --username your_email@nudt.edu.cn --password your_password \
+python -m smail_assistant.cli --username your_email@nudt.edu.cn --password your_password \
     --date 2026-4-30 --max-content 5 --ai \
     --api-key YOUR_API_KEY \
     --api-base https://token-plan-cn.xiaomimimo.com/anthropic \
     --ai-model mimo-v2-pro
 
 # 按日期范围获取邮件（最近一周）
-python -m email_crawler.cli --username your_email@nudt.edu.cn --password your_password \
+python -m smail_assistant.cli --username your_email@nudt.edu.cn --password your_password \
     --start-date 2026-4-25 --end-date 2026-5-1 --ai --api-key YOUR_API_KEY
 
 # 只指定起始日期（到今天为止）
-python -m email_crawler.cli --interactive --start-date 2026-4-1 --ai --api-key YOUR_API_KEY
+python -m smail_assistant.cli --interactive --start-date 2026-4-1 --ai --api-key YOUR_API_KEY
 ```
 
 ## 命令行参数
@@ -131,7 +131,7 @@ python -m email_crawler.cli --interactive --start-date 2026-4-1 --ai --api-key Y
 
 ```
 CC_test/
-├── email_crawler/                  # 主包
+├── smail_assistant/                  # 主包
 │   ├── __init__.py                 # 包入口，导出 MailCrawler、main
 │   ├── crawler.py                  # MailCrawler 核心类（登录、邮件列表、会话管理）
 │   ├── sender.py                   # SMTP 发信（SOCKS5 代理 + SSL 回退）
@@ -149,7 +149,7 @@ CC_test/
 ### 运行方式
 
 ```bash
-python -m email_crawler.cli <参数>
+python -m smail_assistant.cli <参数>
 ```
 
 ### 主要模块
