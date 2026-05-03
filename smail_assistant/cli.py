@@ -89,7 +89,7 @@ def main():
         else:
             logger.info("使用命令行提供的凭据登录邮箱")
     # 凭据来自 config.json → 询问是否使用
-    elif username and password and not args.interactive:
+    elif username and password:
         print(f"\n检测到 config.json 中配置的账号：{username}")
         confirm = input("是否使用该账号登录？(y/n，默认 y): ").strip().lower()
         if confirm and confirm != 'y' and confirm != 'yes':
