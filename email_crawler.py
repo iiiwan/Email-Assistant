@@ -1036,8 +1036,12 @@ class MailCrawler:
             logger.error("SMTP 认证失败，请检查用户名和密码")
         except smtplib.SMTPConnectError:
             logger.error(f"无法连接到 SMTP 服务器 {self.smtp_host}:{self.smtp_port}")
+            print("\n提示：如果开启了代理（如 Clash），请尝试关闭代理后重试。")
         except Exception as e:
             logger.error(f"发送邮件时发生错误: {e}")
+            if 'timed out' in str(e).lower() or 'connection' in str(e).lower() or 'refused' in str(e).lower():
+                print("\n提示：发送失败可能是代理软件（如 Clash）干扰了 SMTP 连接。")
+                print("请尝试：关闭代理，或将 mail.nudt.edu.cn 加入代理的直连规则后重试。")
         return False
 
     def save_mails(self, mails: List[Dict], output_dir: str = 'mails'):
