@@ -13,6 +13,7 @@
 - **中文总结**：自动生成邮件摘要，按发件人分组输出
 - **AI 智能分类**：调用 AI（Anthropic 兼容 API）对邮件自动分类（工作/学术/广告推广/通知/账务/社交/其他）并生成精炼摘要
 - **会话缓存**：登录后缓存 SID，复用会话避免频繁登录
+- **每日日报**：一键拉取当日/日期范围邮件，AI 总结后自动推送到指定邮箱
 - **交互式输入**：支持命令行和交互式两种方式输入认证信息
 
 ## 安装依赖
@@ -94,6 +95,19 @@ python -m smail_assistant.cli --username your_email@nudt.edu.cn --password your_
 python -m smail_assistant.cli --interactive --start-date 2026-4-1 --ai --api-key YOUR_API_KEY
 ```
 
+### 每日日报推送
+
+```bash
+# 推送今日邮件日报到 config.json 中配置的邮箱
+python -m smail_assistant.cli --daily-digest
+
+# 推送指定日期范围的邮件日报
+python -m smail_assistant.cli --daily-digest --start-date 2026-5-1 --end-date 2026-5-3
+
+# 指定推送目标邮箱
+python -m smail_assistant.cli --daily-digest --digest-to your_qq@qq.com
+```
+
 ## 命令行参数
 
 | 参数 | 说明 | 默认值 |
@@ -126,6 +140,8 @@ python -m smail_assistant.cli --interactive --start-date 2026-4-1 --ai --api-key
 | `--api-key` | AI API Key | — |
 | `--api-base` | AI API Base URL | https://token-plan-cn.xiaomimimo.com/anthropic |
 | `--ai-model` | AI 模型名称 | mimo-v2-pro |
+| `--daily-digest` | 每日日报模式（AI 总结 + 推送到邮箱） | — |
+| `--digest-to` | 日报发送目标邮箱 | 从 config.json 读取 |
 
 ## 程序结构
 
