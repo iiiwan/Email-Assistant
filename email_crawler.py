@@ -1690,8 +1690,15 @@ def main():
     selected_date = None
     date_start = None
     date_end = None
-    if args.send or args.daily_digest:
-        selected_date = date.today()  # 发送/日报模式不需要日期选择
+    if args.send:
+        selected_date = date.today()  # 发送模式不需要日期选择
+    elif args.daily_digest:
+        if args.start_date or args.end_date:
+            date_start = parse_date_input(args.start_date) if args.start_date else date.today()
+            date_end = parse_date_input(args.end_date) if args.end_date else date.today()
+            selected_date = date_start
+        else:
+            selected_date = date.today()
     elif args.keyword:
         selected_date = None  # 关键词模式不需要日期
     elif args.start_date or args.end_date:
@@ -1771,7 +1778,7 @@ def main():
 
     # ===== 每日日报模式 =====
     if args.daily_digest:
-        print("=== 每日邮件日报 ===\n")
+        print("=== 邮件日报推送 ===\n")
         session_file = '.session_cache.json'
         session_loaded = crawler.load_session(username, session_file)
         if not session_loaded:
@@ -1784,14 +1791,32 @@ def main():
             print("复用缓存会话。\n")
 
         today = date.today()
-        print(f"正在拉取 {today} 的邮件...")
+        digest_start = date_start or today
+        digest_end = date_end or today
+
+        if digest_start == digest_end:
+            print(f"正在拉取 {digest_start} 的邮件...")
+        else:
+            print(f"正在拉取 {digest_start} ~ {digest_end} 的邮件...")
+
+        # 拉取足够多的页面以覆盖日期范围
+        max_pages = 20 if digest_start != digest_end else 3
         all_mails = []
-        for page in range(1, 3):
-            mails = crawler.get_mail_list(args.mailbox, page, target_date=today)
+        for page in range(1, max_pages + 1):
+            mails = crawler.get_mail_list(args.mailbox, page, target_date=digest_start if digest_start == digest_end else None)
             if not mails:
                 break
             all_mails.extend(mails)
-            if page < 3:
+            # 如果最早的邮件已早于起始日期，停止拉取
+            if digest_start != digest_end:
+                last_time = mails[-1].get('time', mails[-1].get('date', ''))
+                try:
+                    last_date = datetime.strptime(last_time[:10], '%Y-%m-%d').date()
+                    if last_date < digest_start:
+                        break
+                except:
+                    pass
+            if page < max_pages:
                 time.sleep(1)
 
         # 去重
@@ -1804,13 +1829,17 @@ def main():
                 deduped.append(m)
         all_mails = deduped
 
-        # 筛选今日邮件 + 过滤自己发的
-        date_mails = [m for m in all_mails if MailCrawler.is_date_mail(m, today)]
+        # 筛选日期范围邮件 + 过滤自己发的
+        if digest_start == digest_end:
+            date_mails = [m for m in all_mails if MailCrawler.is_date_mail(m, digest_start)]
+        else:
+            date_mails = [m for m in all_mails if MailCrawler.is_date_range_mail(m, digest_start, digest_end)]
         date_mails = [m for m in date_mails if m.get('sender', m.get('from', '')).lower() != username.lower()]
         all_mails = date_mails
 
+        date_label = str(digest_start) if digest_start == digest_end else f"{digest_start} ~ {digest_end}"
         if not all_mails:
-            print(f"\n{today} 没有收到邮件，跳过日报。")
+            print(f"\n{date_label} 没有收到邮件，跳过日报。")
             crawler.logout()
             return
 
@@ -1829,7 +1858,7 @@ def main():
 
         # 构建日报邮件
         digest_lines = []
-        digest_lines.append(f"<h2>  {today} 邮件日报（{len(all_mails)} 封）</h2>")
+        digest_lines.append(f"<h2>  {date_label} 邮件日报（{len(all_mails)} 封）</h2>")
 
         if ai_result and ai_result.get('summary'):
             digest_lines.append(f"<p><b>AI 总结：</b><br>{ai_result['summary']}</p>")
@@ -1863,7 +1892,7 @@ def main():
         print(f"正在发送日报到 {digest_to}...")
         success = crawler.send_mail(
             to=digest_to,
-            subject=f"邮件日报 - {today}",
+            subject=f"邮件日报 - {date_label}",
             body=digest_body,
             is_html=True,
             username=username, password=password,
