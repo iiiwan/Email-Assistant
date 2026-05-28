@@ -763,6 +763,12 @@ class MailCrawler:
                 except Exception as e:
                     logger.warning(f"保存会话失败: {e}")
 
+                # 清理临时文件
+                try:
+                    os.remove('login_qrcode.png')
+                except Exception:
+                    pass
+
                 print("登录成功！")
                 return True
 
