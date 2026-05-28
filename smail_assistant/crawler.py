@@ -539,95 +539,145 @@ class MailCrawler:
             logger.error("未安装 playwright，请运行: pip install playwright && playwright install chromium")
             return False
 
+        browser = None
         print("正在启动浏览器...")
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False)
-            ctx = browser.new_context(ignore_https_errors=True)
-            page = ctx.new_page()
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=False)
+                ctx = browser.new_context(ignore_https_errors=True)
+                page = ctx.new_page()
 
-            # 访问邮箱主页
-            page.goto('https://mail.nudt.edu.cn', wait_until='networkidle')
+                # 访问邮箱主页
+                page.goto('https://mail.nudt.edu.cn', wait_until='networkidle')
 
-            # 尝试自动填写用户名和密码
-            try:
-                uid_input = page.locator('input[name="uid"]')
-                if uid_input.count() > 0:
-                    uid_input.fill(username)
-                    logger.info("已自动填写用户名")
-
-                pwd_input = page.locator('#fakePassword, input[name="fakePassword"]')
-                if pwd_input.count() > 0:
-                    pwd_input.fill(password)
-                    logger.info("已自动填写密码")
-            except Exception as e:
-                logger.warning(f"自动填写凭据失败: {e}")
-
-            print("=" * 50)
-            print("浏览器已打开，请完成以下操作：")
-            print("  1. 检查用户名和密码是否正确")
-            print("  2. 如需扫码认证，请用微信扫码")
-            print("  3. 登录成功后，程序将自动继续")
-            print("=" * 50)
-
-            # 等待页面跳转到邮箱主页（URL 包含 sid=）
-            try:
-                page.wait_for_url("**/coremail/**/index.jsp?sid=*", timeout=120000)
-                logger.info("检测到登录成功，页面已跳转")
-            except Exception:
-                # 回退：等待页面包含邮箱特征
-                print("等待手动登录完成...")
+                # 自动填写用户名和密码
                 try:
-                    page.wait_for_url("**/coremail/**/*", timeout=120000)
-                except Exception:
-                    logger.warning("等待超时，尝试从当前页面提取 SID")
+                    uid_input = page.locator('input[name="uid"]')
+                    if uid_input.count() > 0:
+                        uid_input.fill(username)
+                    pwd_input = page.locator('#fakePassword, input[name="fakePassword"]')
+                    if pwd_input.count() > 0:
+                        pwd_input.fill(password)
+                    logger.info("已自动填写用户名和密码")
+                except Exception as e:
+                    logger.warning(f"自动填写凭据失败: {e}")
 
-            # 提取 SID
-            current_url = page.url
-            import re
-            sid_match = re.search(r'sid=([A-Za-z0-9]+)', current_url)
-            if not sid_match:
-                # 从页面内容中提取
+                # 自动点击登录按钮
                 try:
-                    content = page.content()
-                    sid_match = re.search(r'sid=([A-Za-z0-9]+)', content)
+                    login_btn = page.locator('button.j-submit, button:has-text("登录")')
+                    if login_btn.count() > 0:
+                        login_btn.first.click()
+                        logger.info("已自动点击登录按钮")
+                        page.wait_for_timeout(2000)
+                except Exception as e:
+                    logger.warning(f"自动点击登录按钮失败: {e}")
+
+                # 检查是否需要二次验证（二维码/动态口令）
+                qr_detected = False
+                try:
+                    # 检测二维码区域
+                    qr_selectors = [
+                        '.j-second-auth-wrap:not(.f-dn)',  # 二次验证面板可见
+                        '.QRCode img', '.qrcode img',       # 二维码图片
+                        '.second-auth-wrap img',
+                    ]
+                    for sel in qr_selectors:
+                        elem = page.locator(sel)
+                        if elem.count() > 0:
+                            qr_detected = True
+                            break
+
+                    if not qr_detected:
+                        # 检测动态口令输入框
+                        dynamic_pwd = page.locator('input[name="dynamicPwd"]')
+                        if dynamic_pwd.count() > 0 and dynamic_pwd.is_visible():
+                            qr_detected = True
                 except Exception:
                     pass
 
-            if not sid_match:
-                logger.error("无法从浏览器中提取 SID，登录可能未成功")
-                browser.close()
-                return False
+                if qr_detected:
+                    # 截图保存二维码
+                    try:
+                        qr_img_path = 'login_qrcode.png'
+                        page.screenshot(path=qr_img_path, full_page=False)
+                        import os
+                        abs_path = os.path.abspath(qr_img_path)
+                        print()
+                        print("=" * 55)
+                        print("  需要二次验证！请完成以下操作：")
+                        print(f"  二维码截图已保存: {abs_path}")
+                        print("  请用微信扫描二维码，或在弹出的浏览器中操作")
+                        print("=" * 55)
+                    except Exception:
+                        print()
+                        print("=" * 55)
+                        print("  需要二次验证！请在弹出的浏览器中扫码登录")
+                        print("=" * 55)
+                else:
+                    print("正在登录...")
 
-            self.current_sid = sid_match.group(1)
-            logger.info(f"提取到 SID: {self.current_sid}")
+                # 等待页面跳转到邮箱主页
+                try:
+                    page.wait_for_url("**/coremail/**/index.jsp?sid=*", timeout=120000)
+                    logger.info("检测到登录成功，页面已跳转")
+                except Exception:
+                    try:
+                        page.wait_for_url("**/coremail/**/*", timeout=120000)
+                    except Exception:
+                        logger.warning("等待超时，尝试从当前页面提取 SID")
 
-            # 提取浏览器 cookies
-            cookies = ctx.cookies()
-            for cookie in cookies:
-                self.session.cookies.set(cookie['name'], cookie['value'],
-                                         domain=cookie.get('domain', ''),
-                                         path=cookie.get('path', '/'))
+                # 提取 SID
+                current_url = page.url
+                sid_match = re.search(r'sid=([A-Za-z0-9]+)', current_url)
+                if not sid_match:
+                    try:
+                        content = page.content()
+                        sid_match = re.search(r'sid=([A-Za-z0-9]+)', content)
+                    except Exception:
+                        pass
 
-            self.is_logged_in = True
+                if not sid_match:
+                    logger.error("无法从浏览器中提取 SID，登录可能未成功")
+                    return False
 
-            # 保存会话
-            data = {
-                'username': username,
-                'sid': self.current_sid,
-                'cookies': {c['name']: c['value'] for c in cookies},
-                'saved_at': datetime.now().isoformat()
-            }
-            try:
-                with open(session_file, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False)
-                logger.info(f"会话已缓存到 {session_file}")
-            except Exception as e:
-                logger.warning(f"保存会话失败: {e}")
+                self.current_sid = sid_match.group(1)
+                logger.info(f"提取到 SID: {self.current_sid}")
 
-            browser.close()
+                # 提取浏览器 cookies
+                cookies = ctx.cookies()
+                for cookie in cookies:
+                    self.session.cookies.set(cookie['name'], cookie['value'],
+                                             domain=cookie.get('domain', ''),
+                                             path=cookie.get('path', '/'))
 
-        print("浏览器登录成功！")
-        return True
+                self.is_logged_in = True
+
+                # 保存会话
+                data = {
+                    'username': username,
+                    'sid': self.current_sid,
+                    'cookies': {c['name']: c['value'] for c in cookies},
+                    'saved_at': datetime.now().isoformat()
+                }
+                try:
+                    with open(session_file, 'w', encoding='utf-8') as f:
+                        json.dump(data, f, ensure_ascii=False)
+                    logger.info(f"会话已缓存到 {session_file}")
+                except Exception as e:
+                    logger.warning(f"保存会话失败: {e}")
+
+                print("浏览器登录成功！")
+                return True
+
+        except Exception as e:
+            logger.error(f"浏览器登录出错: {e}")
+            return False
+        finally:
+            if browser:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
 
     def send_mail(self, to: str, subject: str, body: str, cc: str = '', bcc: str = '',
                   is_html: bool = False, priority: int = 3,

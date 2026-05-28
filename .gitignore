@@ -18,3 +18,4 @@ __pycache__/
 # 调试文件
 *.html
 mails/
+login_qrcode.png
