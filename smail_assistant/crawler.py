@@ -184,8 +184,6 @@ class MailCrawler:
                     skip_html_form = True
                 else:
                     logger.error("未找到登录表单和sid")
-                    with open('login_debug.html', 'w', encoding='utf-8') as f:
-                        f.write(response.text)
                     return False
             else:
                 form_action = form.get('action', '')
@@ -305,8 +303,6 @@ class MailCrawler:
                     return True
                 else:
                     logger.warning("重定向后未找到成功标识")
-                    with open('login_redirect_debug.html', 'w', encoding='utf-8') as f:
-                        f.write(redirect_response.text)
                     return False
 
             # 检查JavaScript重定向
@@ -363,8 +359,6 @@ class MailCrawler:
                     return True
 
             logger.warning("登录可能失败，页面不包含成功标识")
-            with open('login_response_debug.html', 'w', encoding='utf-8') as f:
-                f.write(response_text)
             return False
 
         except Exception as e:
