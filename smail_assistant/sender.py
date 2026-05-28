@@ -83,9 +83,11 @@ def _send_mail_smtp(to: str, subject: str, body: str,
         if bcc:
             recipients += [addr.strip() for addr in bcc.split(',') if addr.strip()]
 
-        # 尝试 SOCKS5 代理 + SSL 端口 465（绕过代理工具对 SMTP 的干扰）
+        # 优先直连，失败再尝试 SOCKS5 代理 + SSL 端口 465
+        import socket as _socket_module
+        _original_socket = _socket_module.socket
         server = None
-        for attempt in ['socks_ssl', 'direct']:
+        for attempt in ['direct', 'socks_ssl']:
             try:
                 if attempt == 'socks_ssl':
                     try:
@@ -103,6 +105,8 @@ def _send_mail_smtp(to: str, subject: str, body: str,
                     except ImportError:
                         continue
                 else:
+                    # 恢复原始 socket，确保直连不走代理
+                    _socket_module.socket = _original_socket
                     if smtp_port == 465:
                         server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15)
                     else:
@@ -146,8 +150,8 @@ def _send_mail_smtp(to: str, subject: str, body: str,
                     except:
                         pass
                 server = None
-                if attempt == 'socks_ssl':
-                    logger.warning(f"SOCKS5 SSL 发送失败，尝试直连: {e}")
+                if attempt == 'direct':
+                    logger.warning(f"直连发送失败，尝试 SOCKS5 代理: {e}")
                 else:
                     raise
 

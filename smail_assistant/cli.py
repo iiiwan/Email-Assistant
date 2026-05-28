@@ -75,6 +75,7 @@ def main():
 
     username = args.username or config.get('username')
     password = args.password or config.get('password')
+    smtp_password = config.get('smtp_password', password)
 
     # AI 配置（命令行优先，其次从 config.json 读取）
     api_key = args.api_key or config.get('ai_api_key')
@@ -188,7 +189,7 @@ def main():
             to=args.to, subject=args.subject, body=args.body,
             cc=args.cc or '', bcc=args.bcc or '', is_html=not args.text,
             attachments=args.attachments or [],
-            username=username, password=password,
+            username=username, password=smtp_password,
         )
         if success:
             print(f"\n邮件发送成功！")
@@ -311,6 +312,15 @@ def main():
             time_str = mail.get('time', mail.get('date', ''))
             body_preview = mail.get('body', '')
             if body_preview:
+                # 过滤掉 CSS / 代码片段，避免被当成垃圾邮件
+                import re
+                # 去掉所有花括号包裹的代码块
+                body_preview = re.sub(r'\{[^}]{10,}\}', ' ', body_preview)
+                # 去掉残留的 CSS 关键字行
+                body_preview = re.sub(r'font-face[^;]*;', ' ', body_preview)
+                body_preview = re.sub(r'font-display[^;]*;', ' ', body_preview)
+                body_preview = re.sub(r'-webkit-[^;]*;', ' ', body_preview)
+                body_preview = re.sub(r'-ms-[^;]*;', ' ', body_preview)
                 body_preview = ' '.join(body_preview.split())[:200]
                 if len(mail.get('body', '')) > 200:
                     body_preview += '...'
@@ -328,7 +338,7 @@ def main():
             subject=f"邮件日报 - {date_label}",
             body=digest_body,
             is_html=True,
-            username=username, password=password,
+            username=username, password=smtp_password,
         )
         if success:
             print(f"\n日报已发送到 {digest_to}！")
