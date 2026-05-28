@@ -53,6 +53,7 @@ def parse_args():
     parser.add_argument('--ai-model', default='mimo-v2-pro', help='AI 模型名称')
     parser.add_argument('--daily-digest', action='store_true', help='每日日报模式：拉取今日邮件、AI 总结、发送到指定邮箱')
     parser.add_argument('--digest-to', help='日报发送目标邮箱（默认从 config.json 读取）')
+    parser.add_argument('--browser-login', action='store_true', help='使用浏览器登录（支持 2FA 二次验证）')
     return parser.parse_args()
 
 
@@ -201,11 +202,18 @@ def main():
         session_file = '.session_cache.json'
         session_loaded = crawler.load_session(username, session_file)
         if not session_loaded:
-            print("正在登录邮箱...")
-            if not crawler.login(username, password):
-                logger.error("登录失败，程序退出")
-                return
-            crawler.save_session(username, session_file)
+            if args.browser_login:
+                if not crawler.login_browser(username, password, session_file):
+                    logger.error("浏览器登录失败，程序退出")
+                    return
+            else:
+                print("正在登录邮箱...")
+                if not crawler.login(username, password):
+                    print("普通登录失败（可能需要二次验证），尝试浏览器登录...")
+                    if not crawler.login_browser(username, password, session_file):
+                        logger.error("登录失败，程序退出")
+                        return
+                crawler.save_session(username, session_file)
         else:
             print("复用缓存会话。\n")
 
@@ -337,12 +345,18 @@ def main():
     if session_loaded:
         print("复用缓存会话，无需重新登录。\n")
     else:
-        print("正在登录邮箱...")
-        if not crawler.login(username, password):
-            logger.error("登录失败，程序退出")
-            return
-        print("登录成功！\n")
-        crawler.save_session(username, session_file)
+        if args.browser_login:
+            if not crawler.login_browser(username, password, session_file):
+                logger.error("浏览器登录失败，程序退出")
+                return
+        else:
+            print("正在登录邮箱...")
+            if not crawler.login(username, password):
+                print("普通登录失败（可能需要二次验证），尝试浏览器登录...")
+                if not crawler.login_browser(username, password, session_file):
+                    logger.error("登录失败，程序退出")
+                    return
+            crawler.save_session(username, session_file)
 
     try:
         all_mails = []

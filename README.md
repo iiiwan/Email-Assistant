@@ -16,6 +16,7 @@
 - **每日日报**：一键拉取当日/日期范围邮件，AI 总结后自动推送到指定邮箱
 - **进度条显示**：长时间操作（拉取多页邮件、Playwright 读取正文）实时显示进度
 - **灵活登录**：支持命令行参数、config.json 配置（可确认或替换）、交互式输入三种方式
+- **2FA 支持**：普通登录失败时自动回退浏览器登录，支持微信扫码等二次验证
 
 ## 安装依赖
 
@@ -145,6 +146,7 @@ python -m smail_assistant.cli --daily-digest --digest-to your_qq@qq.com
 | `--ai-model` | AI 模型名称 | mimo-v2-pro |
 | `--daily-digest` | 每日日报模式（AI 总结 + 推送到邮箱） | — |
 | `--digest-to` | 日报发送目标邮箱 | 从 config.json 读取 |
+| `--browser-login` | 使用浏览器登录（支持 2FA 二次验证） | — |
 
 ## 程序结构
 

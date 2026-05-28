@@ -530,6 +530,105 @@ class MailCrawler:
             logger.error(f"获取邮件内容时发生错误: {e}")
             return None
 
+    def login_browser(self, username: str, password: str,
+                      session_file: str = '.session_cache.json') -> bool:
+        """通过 Playwright 浏览器登录，支持 2FA 二次验证（需手动扫码/输入）"""
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            logger.error("未安装 playwright，请运行: pip install playwright && playwright install chromium")
+            return False
+
+        print("正在启动浏览器...")
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=False)
+            ctx = browser.new_context(ignore_https_errors=True)
+            page = ctx.new_page()
+
+            # 访问邮箱主页
+            page.goto('https://mail.nudt.edu.cn', wait_until='networkidle')
+
+            # 尝试自动填写用户名和密码
+            try:
+                uid_input = page.locator('input[name="uid"]')
+                if uid_input.count() > 0:
+                    uid_input.fill(username)
+                    logger.info("已自动填写用户名")
+
+                pwd_input = page.locator('#fakePassword, input[name="fakePassword"]')
+                if pwd_input.count() > 0:
+                    pwd_input.fill(password)
+                    logger.info("已自动填写密码")
+            except Exception as e:
+                logger.warning(f"自动填写凭据失败: {e}")
+
+            print("=" * 50)
+            print("浏览器已打开，请完成以下操作：")
+            print("  1. 检查用户名和密码是否正确")
+            print("  2. 如需扫码认证，请用微信扫码")
+            print("  3. 登录成功后，程序将自动继续")
+            print("=" * 50)
+
+            # 等待页面跳转到邮箱主页（URL 包含 sid=）
+            try:
+                page.wait_for_url("**/coremail/**/index.jsp?sid=*", timeout=120000)
+                logger.info("检测到登录成功，页面已跳转")
+            except Exception:
+                # 回退：等待页面包含邮箱特征
+                print("等待手动登录完成...")
+                try:
+                    page.wait_for_url("**/coremail/**/*", timeout=120000)
+                except Exception:
+                    logger.warning("等待超时，尝试从当前页面提取 SID")
+
+            # 提取 SID
+            current_url = page.url
+            import re
+            sid_match = re.search(r'sid=([A-Za-z0-9]+)', current_url)
+            if not sid_match:
+                # 从页面内容中提取
+                try:
+                    content = page.content()
+                    sid_match = re.search(r'sid=([A-Za-z0-9]+)', content)
+                except Exception:
+                    pass
+
+            if not sid_match:
+                logger.error("无法从浏览器中提取 SID，登录可能未成功")
+                browser.close()
+                return False
+
+            self.current_sid = sid_match.group(1)
+            logger.info(f"提取到 SID: {self.current_sid}")
+
+            # 提取浏览器 cookies
+            cookies = ctx.cookies()
+            for cookie in cookies:
+                self.session.cookies.set(cookie['name'], cookie['value'],
+                                         domain=cookie.get('domain', ''),
+                                         path=cookie.get('path', '/'))
+
+            self.is_logged_in = True
+
+            # 保存会话
+            data = {
+                'username': username,
+                'sid': self.current_sid,
+                'cookies': {c['name']: c['value'] for c in cookies},
+                'saved_at': datetime.now().isoformat()
+            }
+            try:
+                with open(session_file, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False)
+                logger.info(f"会话已缓存到 {session_file}")
+            except Exception as e:
+                logger.warning(f"保存会话失败: {e}")
+
+            browser.close()
+
+        print("浏览器登录成功！")
+        return True
+
     def send_mail(self, to: str, subject: str, body: str, cc: str = '', bcc: str = '',
                   is_html: bool = False, priority: int = 3,
                   attachments: List[str] = None, username: str = '', password: str = '') -> bool:
