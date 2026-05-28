@@ -47,7 +47,7 @@ python -m smail_assistant.cli <参数>
 - **SSL 证书**：服务器使用自签名证书，需禁用 SSL 验证
 - **发信模式无需登录**：`--send` 模式直接用 SMTP，跳过网页登录
 - **登录确认**：config.json 配置的账号密码运行时会提示确认，输入 `n` 可手动输入其他账号
-- **2FA 二次验证**：普通登录失败（`FA_NEED_DYNAMIC_PWD`）时自动回退 `login_browser()`，弹出浏览器让用户扫码；也可用 `--browser-login` 强制使用浏览器登录
+- **2FA 二次验证**：普通登录失败（`FA_NEED_DYNAMIC_PWD`）时自动回退 `login_browser()`，headless 浏览器后台运行，截取二维码弹出 tkinter 小窗口供扫码（不弹出浏览器）；也可用 `--browser-login` 强制使用浏览器登录
 - **AI 分类总结**：通过小米 MiMo API（Anthropic 兼容格式）对邮件智能分类和精炼总结
   - 端点：`POST {api_base}/v1/messages`，Header `x-api-key`，`anthropic-version: 2023-06-01`
   - 默认模型：`mimo-v2-pro`，默认 API Base：`https://token-plan-cn.xiaomimimo.com/anthropic`
