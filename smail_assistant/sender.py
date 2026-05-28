@@ -98,6 +98,7 @@ def _send_mail_smtp(to: str, subject: str, body: str,
                         ctx.check_hostname = False
                         ctx.verify_mode = _ssl.CERT_NONE
                         server = smtplib.SMTP_SSL(smtp_host, 465, timeout=15, context=ctx)
+                        server.ehlo()
                         logger.info("通过 SOCKS5 代理连接 SMTP (端口465 SSL)")
                     except ImportError:
                         continue
@@ -109,7 +110,31 @@ def _send_mail_smtp(to: str, subject: str, body: str,
                         server.ehlo()
                     logger.info(f"直接连接 SMTP 服务器: {smtp_host}:{smtp_port}")
 
-                server.login(username, password)
+                # 尝试 AUTH PLAIN，失败则回退 AUTH LOGIN
+                authenticated = False
+                try:
+                    import base64
+                    auth_string = f'\x00{username}\x00{password}'.encode('utf-8')
+                    auth_b64 = base64.b64encode(auth_string).decode('ascii')
+                    code, msg_text = server.docmd('AUTH', f'PLAIN {auth_b64}')
+                    logger.info(f"AUTH PLAIN 响应: {code} {msg_text}")
+                    if code == 235:
+                        authenticated = True
+                        logger.info("使用 AUTH PLAIN 认证成功")
+                    else:
+                        logger.info(f"AUTH PLAIN 失败，尝试 AUTH LOGIN")
+                except Exception as e:
+                    logger.info(f"AUTH PLAIN 异常: {e}")
+
+                if not authenticated:
+                    try:
+                        server.login(username, password)
+                        authenticated = True
+                        logger.info("使用 AUTH LOGIN 认证成功")
+                    except Exception as e:
+                        logger.error(f"AUTH LOGIN 也失败: {e}")
+                        raise
+
                 server.sendmail(from_addr, recipients, msg.as_string())
                 server.quit()
                 logger.info(f"邮件发送成功: to={to}, subject={subject}")
