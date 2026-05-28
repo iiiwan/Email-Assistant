@@ -646,12 +646,27 @@ class MailCrawler:
                     qr_img_path = 'login_qrcode.png'
                     extracted = False
                     try:
-                        for sel in qr_selectors:
-                            elem = page.locator(sel)
-                            if elem.count() > 0:
-                                elem.first.screenshot(path=qr_img_path)
+                        # 优先用 alt="Scan me!" 定位真正的二维码（避免抓到小图标）
+                        qr_img = page.locator('img[alt="Scan me!"]')
+                        if qr_img.count() > 0 and qr_img.first.is_visible():
+                            qr_img.first.screenshot(path=qr_img_path)
+                            extracted = True
+                        else:
+                            # 兜底：找最大的可见 img 元素
+                            best = None
+                            best_area = 0
+                            for sel in qr_selectors:
+                                elem = page.locator(sel)
+                                for i in range(elem.count()):
+                                    el = elem.nth(i)
+                                    if el.is_visible():
+                                        box = el.bounding_box()
+                                        if box and box['width'] * box['height'] > best_area:
+                                            best_area = box['width'] * box['height']
+                                            best = el
+                            if best:
+                                best.screenshot(path=qr_img_path)
                                 extracted = True
-                                break
                     except Exception:
                         pass
 
