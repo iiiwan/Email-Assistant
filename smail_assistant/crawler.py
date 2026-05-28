@@ -26,32 +26,40 @@ def _show_qr_popup(qr_img_path):
     import tkinter as tk
 
     root = tk.Tk()
-    root.title("邮箱登录 - 扫码验证")
+    root.title("~ 邮箱登录 ~")
     root.resizable(False, False)
-    root.configure(bg="#f5f5f5")
+    root.configure(bg="#fff0f5")
 
-    # 标题栏
-    header = tk.Frame(root, bg="#2b5797", height=50)
+    # 标题栏（渐变粉色系）
+    header = tk.Frame(root, bg="#e8789a", height=56)
     header.pack(fill="x")
     header.pack_propagate(False)
-    tk.Label(header, text="NUDT 邮箱登录", font=("", 14, "bold"),
-             bg="#2b5797", fg="white").pack(expand=True)
+    tk.Label(header, text="~ NUDT 邮箱登录 ~", font=("", 15, "bold"),
+             bg="#e8789a", fg="white").pack(expand=True)
+
+    # 分隔线
+    tk.Frame(root, bg="#f4a7bb", height=2).pack(fill="x")
 
     # 提示文字
-    tk.Label(root, text="请使用微信扫描下方二维码完成登录",
-             font=("", 10), bg="#f5f5f5", fg="#555").pack(pady=(12, 5))
+    tk.Label(root, text="请使用微信扫描二维码完成登录 >w<",
+             font=("", 11), bg="#fff0f5", fg="#b5567a").pack(pady=(14, 6))
 
-    # 二维码区域（加边框）
-    qr_frame = tk.Frame(root, bg="white", bd=2, relief="groove")
-    qr_frame.pack(padx=20, pady=5)
+    # 二维码区域（加粉色边框 + 阴影效果）
+    outer = tk.Frame(root, bg="#f4a7bb", bd=0)
+    outer.pack(padx=24, pady=4)
+    qr_frame = tk.Frame(outer, bg="white", bd=0)
+    qr_frame.pack(padx=3, pady=3)
+
     photo = tk.PhotoImage(file=qr_img_path)
+    # 放大 2 倍
+    photo = photo.zoom(2, 2)
     label = tk.Label(qr_frame, image=photo, bg="white")
     label.image = photo
-    label.pack(padx=8, pady=8)
+    label.pack(padx=10, pady=10)
 
     # 底部提示
-    tk.Label(root, text="扫码后窗口将自动关闭", font=("", 9),
-             bg="#f5f5f5", fg="#999").pack(pady=(5, 12))
+    tk.Label(root, text="* 扫码后窗口将自动关闭 *", font=("", 9, "italic"),
+             bg="#fff0f5", fg="#d4919e").pack(pady=(6, 14))
 
     # 窗口居中
     root.update_idletasks()
