@@ -26,15 +26,32 @@ def _show_qr_popup(qr_img_path):
     import tkinter as tk
 
     root = tk.Tk()
-    root.title("扫码登录")
+    root.title("邮箱登录 - 扫码验证")
     root.resizable(False, False)
+    root.configure(bg="#f5f5f5")
 
+    # 标题栏
+    header = tk.Frame(root, bg="#2b5797", height=50)
+    header.pack(fill="x")
+    header.pack_propagate(False)
+    tk.Label(header, text="NUDT 邮箱登录", font=("", 14, "bold"),
+             bg="#2b5797", fg="white").pack(expand=True)
+
+    # 提示文字
+    tk.Label(root, text="请使用微信扫描下方二维码完成登录",
+             font=("", 10), bg="#f5f5f5", fg="#555").pack(pady=(12, 5))
+
+    # 二维码区域（加边框）
+    qr_frame = tk.Frame(root, bg="white", bd=2, relief="groove")
+    qr_frame.pack(padx=20, pady=5)
     photo = tk.PhotoImage(file=qr_img_path)
-    label = tk.Label(root, image=photo)
-    label.image = photo  # 防止 GC
-    label.pack(padx=10, pady=10)
-    hint = tk.Label(root, text="请用微信扫描二维码登录", font=("", 12))
-    hint.pack(pady=(0, 10))
+    label = tk.Label(qr_frame, image=photo, bg="white")
+    label.image = photo
+    label.pack(padx=8, pady=8)
+
+    # 底部提示
+    tk.Label(root, text="扫码后窗口将自动关闭", font=("", 9),
+             bg="#f5f5f5", fg="#999").pack(pady=(5, 12))
 
     # 窗口居中
     root.update_idletasks()
