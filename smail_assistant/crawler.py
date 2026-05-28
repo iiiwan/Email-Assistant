@@ -592,7 +592,7 @@ class MailCrawler:
         print("正在启动浏览器登录...")
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=False)
+                browser = p.chromium.launch(headless=True)
                 ctx = browser.new_context(ignore_https_errors=True)
                 page = ctx.new_page()
 
