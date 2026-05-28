@@ -21,6 +21,55 @@ from .utils import save_mails
 logger = logging.getLogger(__name__)
 
 
+def _show_qr_popup(qr_img_path):
+    """弹出二维码窗口（不阻塞），返回 root 对象"""
+    import tkinter as tk
+
+    root = tk.Tk()
+    root.title("扫码登录")
+    root.resizable(False, False)
+
+    photo = tk.PhotoImage(file=qr_img_path)
+    label = tk.Label(root, image=photo)
+    label.image = photo  # 防止 GC
+    label.pack(padx=10, pady=10)
+    hint = tk.Label(root, text="请用微信扫描二维码登录", font=("", 12))
+    hint.pack(pady=(0, 10))
+
+    # 窗口居中
+    root.update_idletasks()
+    w = root.winfo_width()
+    h = root.winfo_height()
+    x = (root.winfo_screenwidth() - w) // 2
+    y = (root.winfo_screenheight() - h) // 2
+    root.geometry(f"+{x}+{y}")
+
+    return root
+
+
+def _poll_login(page, root, result):
+    """用 root.after() 在同一线程轮询页面 URL（Playwright 基于 greenlet，不能跨线程）"""
+    try:
+        url = page.url
+        if 'coremail' in url and 'login' not in url.lower() and 'sid=' in url:
+            try:
+                content = page.content()
+                if '收件箱' in content or 'inbox' in content.lower():
+                    result['success'] = True
+                    root.destroy()
+                    return
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    result['poll_count'] = result.get('poll_count', 0) + 1
+    if result['poll_count'] < 60:  # 最多 120 秒（每次 2 秒）
+        root.after(2000, lambda: _poll_login(page, root, result))
+    else:
+        root.destroy()
+
+
 class MailCrawler:
     """邮件爬取器"""
 
@@ -532,7 +581,7 @@ class MailCrawler:
 
     def login_browser(self, username: str, password: str,
                       session_file: str = '.session_cache.json') -> bool:
-        """通过 Playwright 浏览器登录，支持 2FA 二次验证（需手动扫码/输入）"""
+        """通过 Playwright 浏览器登录，支持 2FA 二次验证（二维码弹窗显示）"""
         try:
             from playwright.sync_api import sync_playwright
         except ImportError:
@@ -540,7 +589,7 @@ class MailCrawler:
             return False
 
         browser = None
-        print("正在启动浏览器...")
+        print("正在启动浏览器登录...")
         try:
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=False)
@@ -574,21 +623,18 @@ class MailCrawler:
 
                 # 检查是否需要二次验证（二维码/动态口令）
                 qr_detected = False
+                qr_selectors = [
+                    '.j-second-auth-wrap:not(.f-dn)',
+                    '.QRCode img', '.qrcode img',
+                    '.second-auth-wrap img',
+                ]
                 try:
-                    # 检测二维码区域
-                    qr_selectors = [
-                        '.j-second-auth-wrap:not(.f-dn)',  # 二次验证面板可见
-                        '.QRCode img', '.qrcode img',       # 二维码图片
-                        '.second-auth-wrap img',
-                    ]
                     for sel in qr_selectors:
                         elem = page.locator(sel)
                         if elem.count() > 0:
                             qr_detected = True
                             break
-
                     if not qr_detected:
-                        # 检测动态口令输入框
                         dynamic_pwd = page.locator('input[name="dynamicPwd"]')
                         if dynamic_pwd.count() > 0 and dynamic_pwd.is_visible():
                             qr_detected = True
@@ -596,35 +642,52 @@ class MailCrawler:
                     pass
 
                 if qr_detected:
-                    # 截图保存二维码
+                    # 从浏览器页面提取二维码，弹窗显示
+                    qr_img_path = 'login_qrcode.png'
+                    extracted = False
                     try:
-                        qr_img_path = 'login_qrcode.png'
-                        page.screenshot(path=qr_img_path, full_page=False)
-                        import os
-                        abs_path = os.path.abspath(qr_img_path)
-                        print()
-                        print("=" * 55)
-                        print("  需要二次验证！请完成以下操作：")
-                        print(f"  二维码截图已保存: {abs_path}")
-                        print("  请用微信扫描二维码，或在弹出的浏览器中操作")
-                        print("=" * 55)
+                        for sel in qr_selectors:
+                            elem = page.locator(sel)
+                            if elem.count() > 0:
+                                elem.first.screenshot(path=qr_img_path)
+                                extracted = True
+                                break
                     except Exception:
-                        print()
-                        print("=" * 55)
-                        print("  需要二次验证！请在弹出的浏览器中扫码登录")
-                        print("=" * 55)
-                else:
-                    print("正在登录...")
+                        pass
 
-                # 等待页面跳转到邮箱主页
-                try:
-                    page.wait_for_url("**/coremail/**/index.jsp?sid=*", timeout=120000)
-                    logger.info("检测到登录成功，页面已跳转")
-                except Exception:
+                    if extracted:
+                        print()
+                        print("=" * 55)
+                        print("  需要二次验证！请用微信扫描弹出的二维码")
+                        print("=" * 55)
+
+                        # 弹窗显示二维码，用 root.after() 同线程轮询（兼容 Playwright greenlet）
+                        root = _show_qr_popup(qr_img_path)
+                        result = {'success': False}
+                        root.after(2000, lambda: _poll_login(page, root, result))
+                        root.mainloop()
+
+                        if not result['success']:
+                            print("扫码超时，请重试")
+                            return False
+                    else:
+                        print()
+                        print("=" * 55)
+                        print("  需要二次验证！请在浏览器中扫码登录")
+                        print("=" * 55)
+                        try:
+                            page.wait_for_url("**/coremail/**/*", timeout=120000)
+                        except Exception:
+                            logger.warning("等待超时")
+                else:
+                    # 没有 2FA，直接等待跳转
                     try:
-                        page.wait_for_url("**/coremail/**/*", timeout=120000)
+                        page.wait_for_url("**/coremail/**/index.jsp?sid=*", timeout=30000)
                     except Exception:
-                        logger.warning("等待超时，尝试从当前页面提取 SID")
+                        try:
+                            page.wait_for_url("**/coremail/**/*", timeout=30000)
+                        except Exception:
+                            logger.warning("等待登录跳转超时")
 
                 # 提取 SID
                 current_url = page.url
@@ -666,7 +729,7 @@ class MailCrawler:
                 except Exception as e:
                     logger.warning(f"保存会话失败: {e}")
 
-                print("浏览器登录成功！")
+                print("登录成功！")
                 return True
 
         except Exception as e:
