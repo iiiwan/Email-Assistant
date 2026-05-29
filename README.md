@@ -16,7 +16,7 @@
 - **每日日报**：一键拉取当日/日期范围邮件，AI 总结后自动推送到指定邮箱
 - **进度条显示**：长时间操作（拉取多页邮件、Playwright 读取正文）实时显示进度
 - **灵活登录**：支持命令行参数、config.json 配置（可确认或替换）、交互式输入三种方式
-- **2FA 支持**：普通登录失败时自动回退浏览器登录，自动弹出二维码窗口供微信扫码，无需打开浏览器
+- **2FA 支持**：NUDT 邮箱新增了扫码二次认证，普通登录失败时自动回退浏览器登录，弹出二维码小窗口供微信扫码，无需打开浏览器
 
 ## 安装依赖
 
@@ -146,7 +146,7 @@ python -m smail_assistant.cli --daily-digest --digest-to your_qq@qq.com
 | `--ai-model` | AI 模型名称 | mimo-v2-pro |
 | `--daily-digest` | 每日日报模式（AI 总结 + 推送到邮箱） | — |
 | `--digest-to` | 日报发送目标邮箱 | 从 config.json 读取 |
-| `--browser-login` | 使用浏览器登录（支持 2FA 二次验证） | — |
+| `--browser-login` | 强制使用浏览器登录（弹出二维码供扫码） | — |
 
 ## 程序结构
 
@@ -177,6 +177,7 @@ python -m smail_assistant.cli <参数>
 
 - `crawler.py` — `MailCrawler` 核心类
   - `login()` — 登录邮箱，获取会话 SID
+  - `login_browser()` — 浏览器登录，支持 2FA 二维码扫码
   - `load_session()` / `save_session()` — 会话缓存，避免重复登录
   - `get_mail_list()` — 通过 Coremail JSON API 获取邮件列表
   - `get_mail_content()` — 获取邮件元数据
@@ -216,7 +217,8 @@ python -m smail_assistant.cli <参数>
 1. **网络环境**：需能访问 mail.nudt.edu.cn（校内网络或 VPN）
 2. **登录方式**：config.json 配置的账号密码会提示确认，输入 `n` 可手动输入其他账号
 3. **Playwright**：读取邮件正文需要安装 Playwright 及 Chromium 浏览器
-4. **会话缓存**：登录后 SID 缓存 8 小时，期间无需重复登录
+4. **二次认证（2FA）**：NUDT 邮箱启用了微信扫码二次验证，首次运行时会弹出二维码窗口，用微信扫码即可登录
+5. **会话缓存**：登录后 SID 缓存 8 小时，期间无需重复登录和扫码
 5. **频率控制**：请求间自动添加随机延迟，避免被封
 6. **SMTP 发信**：不需要网页登录，直接通过 SMTP 协议发送
 7. **SSL 证书**：默认禁用 SSL 证书验证，因服务器使用自签名证书
