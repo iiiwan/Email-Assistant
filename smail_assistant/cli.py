@@ -288,47 +288,45 @@ def main():
         if not ai_result:
             print("AI 服务不可用，将使用关键词摘要生成日报。\n")
 
-        # 构建日报邮件
+        # 构建日报邮件（纯文本格式，NUDT SMTP 服务器拒绝 HTML 邮件）
+        import re as _re
         digest_lines = []
-        digest_lines.append(f"<h2>  {date_label} 邮件日报（{len(all_mails)} 封）</h2>")
+        digest_lines.append(f"{'='*40}")
+        digest_lines.append(f"  {date_label} 邮件日报（{len(all_mails)} 封）")
+        digest_lines.append(f"{'='*40}")
 
         if ai_result and ai_result.get('summary'):
-            digest_lines.append(f"<p><b>AI 总结：</b><br>{ai_result['summary']}</p>")
+            digest_lines.append(f"\n【AI 总结】\n{ai_result['summary']}")
         else:
             fallback_summary = generate_summary(all_mails, digest_start if digest_start == digest_end else None)
-            digest_lines.append(f"<p><b>摘要：</b><br>{fallback_summary}</p>")
+            digest_lines.append(f"\n【摘要】\n{fallback_summary}")
 
         if ai_result and ai_result.get('categories'):
-            digest_lines.append("<p><b>分类统计：</b></p><ul>")
+            digest_lines.append("\n【分类统计】")
             for cat, indices in ai_result['categories'].items():
                 subjects = [all_mails[i].get('subject', '无标题') for i in indices if i < len(all_mails)]
-                digest_lines.append(f"<li><b>{cat}</b>（{len(indices)} 封）：{'、'.join(subjects[:5])}</li>")
-            digest_lines.append("</ul>")
+                digest_lines.append(f"  • {cat}（{len(indices)} 封）：{'、'.join(subjects[:5])}")
 
-        digest_lines.append("<hr><p><b>邮件详情：</b></p>")
+        digest_lines.append(f"\n{'─'*40}")
+        digest_lines.append("【邮件详情】")
         for i, mail in enumerate(all_mails, 1):
             sender = mail.get('sender', mail.get('from', '未知'))
             subject = mail.get('subject', '无标题')
             time_str = mail.get('time', mail.get('date', ''))
             body_preview = mail.get('body', '')
             if body_preview:
-                # 过滤掉 CSS / 代码片段，避免被当成垃圾邮件
-                import re
-                # 去掉所有花括号包裹的代码块
-                body_preview = re.sub(r'\{[^}]{10,}\}', ' ', body_preview)
-                # 去掉残留的 CSS 关键字行
-                body_preview = re.sub(r'font-face[^;]*;', ' ', body_preview)
-                body_preview = re.sub(r'font-display[^;]*;', ' ', body_preview)
-                body_preview = re.sub(r'-webkit-[^;]*;', ' ', body_preview)
-                body_preview = re.sub(r'-ms-[^;]*;', ' ', body_preview)
+                body_preview = _re.sub(r'\{[^}]{10,}\}', ' ', body_preview)
+                body_preview = _re.sub(r'font-face[^;]*;', ' ', body_preview)
+                body_preview = _re.sub(r'font-display[^;]*;', ' ', body_preview)
+                body_preview = _re.sub(r'-webkit-[^;]*;', ' ', body_preview)
+                body_preview = _re.sub(r'-ms-[^;]*;', ' ', body_preview)
                 body_preview = ' '.join(body_preview.split())[:200]
                 if len(mail.get('body', '')) > 200:
                     body_preview += '...'
-            digest_lines.append(
-                f"<p><b>{i}. {subject}</b><br>"
-                f"发件人：{sender} | 时间：{time_str}<br>"
-                f"{body_preview}</p>"
-            )
+            digest_lines.append(f"\n{i}. {subject}")
+            digest_lines.append(f"   发件人：{sender} | 时间：{time_str}")
+            if body_preview:
+                digest_lines.append(f"   {body_preview}")
 
         digest_body = '\n'.join(digest_lines)
 
@@ -337,7 +335,7 @@ def main():
             to=digest_to,
             subject=f"邮件日报 - {date_label}",
             body=digest_body,
-            is_html=True,
+            is_html=False,
             username=username, password=smtp_password,
         )
         if success:
